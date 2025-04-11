@@ -1,2 +1,2 @@
-# -CN-ChatBot
+# ChatBot
 Xây dựng chatbot gần giống chatGPT
