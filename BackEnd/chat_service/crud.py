@@ -10,7 +10,7 @@ def create_chat_session(db: db_dependency, chat_session: ChatSessionCreate) -> C
     db.add(db_chat_session)
     db.commit()
     db.refresh(db_chat_session)
-    return ChatSessionOut.from_orm(chat_session)
+    return ChatSessionOut.from_orm(db_chat_session)
 # Hàm để thêm tin nhắn vào phiên chat
 def add_message_to_chat(db: db_dependency, message_data: AddMessage) -> MessageOut:
     db_message = ChatHistory(

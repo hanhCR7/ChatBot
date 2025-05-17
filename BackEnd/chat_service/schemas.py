@@ -11,10 +11,10 @@ class ChatSessionBase(BaseModel):
     created_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ChatSessionCreate(BaseModel):
-    user_id: int
+    user_id: Optional[int] = None
     title: Optional[str] = "New Chat"
 
 class ChatSessionUpdate(BaseModel):
@@ -39,10 +39,46 @@ class MessageOut(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # ========== Full Chat History ==========
 
 class ChatHistoryOut(BaseModel):
     chat_session: ChatSessionOut
     messages: List[MessageOut]
+
+class BanedKeywordOut(BaseModel):
+    id: int
+    keyword: str
+    class Config:
+        from_attributes = True
+class BanedKeywordCreate(BaseModel):
+    keyword: str
+
+class ViolationLogCreate(BaseModel):
+    usser_id: int
+    message: str
+    level: int
+
+class ViolationLogOut(BaseModel):
+    id: int
+    user_id: int
+    message: str
+    level: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ViolationStrikeOut(BaseModel):
+    id: int
+    user_id: int
+    strike_count: int
+    last_updated: datetime
+
+    class Config:
+        from_attributes = True
+class ViolationStrikeCreate(BaseModel):
+    user_id: int
+    strike_count: int
+    last_updated: Optional[datetime] = None

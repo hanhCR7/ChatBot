@@ -8,7 +8,7 @@ import datetime
 class ChatSession(Base):
     __tablename__ = 'chat_sessions'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(Integer, unique=True, nullable=False)
+    user_id = Column(Integer, nullable=False)
     title = Column(String, nullable=False, default="New Chat")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     chat_history = relationship("ChatHistory", back_populates="chat_session", cascade="all, delete-orphan")
@@ -21,3 +21,22 @@ class ChatHistory(Base):
     content = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     chat_session = relationship("ChatSession", back_populates="chat_history")
+
+class BanedKeywords(Base):
+    __tablename__ = 'baned_keywords'
+    id = Column(Integer, primary_key=True, index=True)
+    keyword = Column(String, unique=True, nullable=False)
+
+class ViolationLog(Base):
+    __tablename__ = 'violation_logs'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False)
+    message = Column(String, nullable=False)
+    level = Column(Integer, default=1)  # Mức độ vi phạm
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+class ViolationStrike(Base):
+    __tablename__ = 'violation_strikes'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, unique=True, nullable=False)
+    strike_count = Column(Integer, default=1)
+    last_updated = Column(DateTime, default=datetime.datetime.utcnow)

@@ -1,12 +1,9 @@
 from fastapi import FastAPI
-from routers import chat, baned_keyword
-from db_config import Base, engine
+from routers import send_email, otp
+from databases import Base, engine
 from fastapi.middleware.cors import CORSMiddleware
 Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Email Service API")
-# Gắn router
-app.include_router(chat.router)
-app.include_router(baned_keyword.router)
 # Cấu hình CORS
 app.add_middleware(
     CORSMiddleware,
@@ -15,6 +12,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-@app.get("/api/chatbot_service/")
+# Gắn router
+app.include_router(send_email.router)
+app.include_router(otp.router)
+@app.get("/api/email_service/")
 async def root():
-    return {"message": "Welcome to ChatBot Service!"}
+    return {"message": "Welcome to Email Service!"}
