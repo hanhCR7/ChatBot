@@ -1,23 +1,41 @@
-// src/components/Chat/ChatInput.jsx
 import { Paperclip, Send, XCircle } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 
-export default function ChatInput({ inputValue, setInputValue, handleKeyPress, handleSendMessage, handleAttachmentClick, removeAttachment, attachment, fileInputRef, handleFileChange }) {
+export default function ChatInput({
+  inputValue,
+  setInputValue,
+  handleKeyPress,
+  handleSendMessage,
+  handleAttachmentClick,
+  removeAttachment,
+  attachment,
+  fileInputRef,
+  handleFileChange,
+}) {
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = textarea.scrollHeight + 'px';
+    }
+  }, [inputValue]);
+
   return (
-    <div className="border-t border-gray-200 p-4 bg-white">
+    <div className="border-t border-gray-200 bg-white p-4">
       {attachment && (
-        <div className="bg-gray-100 border-t border-gray-200 p-2">
-          <div className="flex items-center bg-white rounded-lg p-2 w-full max-w-xs">
-            <div className="flex-1 truncate text-sm">
-              📎 {attachment.name} ({Math.round(attachment.size / 1024)} KB)
-            </div>
-            <button onClick={removeAttachment} className="ml-2 text-gray-500 hover:text-gray-700">
-              <XCircle size={16} />
-            </button>
-          </div>
+        <div className="mb-2 flex items-center justify-between bg-gray-100 rounded-lg px-4 py-2">
+          <span className="text-sm truncate">
+            📎 {attachment.name} ({Math.round(attachment.size / 1024)} KB)
+          </span>
+          <button onClick={removeAttachment} className="text-gray-500 hover:text-red-500">
+            <XCircle size={18} />
+          </button>
         </div>
       )}
 
-      <div className="flex items-center">
+      <div className="flex items-end gap-2">
         <input
           type="file"
           ref={fileInputRef}
@@ -26,23 +44,24 @@ export default function ChatInput({ inputValue, setInputValue, handleKeyPress, h
         />
         <button
           onClick={handleAttachmentClick}
-          className="p-2 rounded-full hover:bg-gray-100 text-gray-500"
+          className="p-2 text-gray-500 hover:text-gray-700 transition"
         >
           <Paperclip size={20} />
         </button>
-        <div className="flex-1 mx-2">
-          <textarea
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Nhập tin nhắn..."
-            className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            rows={1}
-          />
-        </div>
+
+        <textarea
+          ref={textareaRef}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="Nhập tin nhắn..."
+          rows={1}
+          className="flex-1 resize-none rounded-2xl border border-gray-300 bg-white py-2 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-sm"
+        />
+
         <button
           onClick={handleSendMessage}
-          className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={inputValue.trim() === '' && !attachment}
         >
           <Send size={20} />

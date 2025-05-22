@@ -2,32 +2,27 @@
 import ChatbotUI from "./Components/ChatbotUI";
 import LoginPage from "./pages/LoginPage";
 import { useState, useEffect } from "react";
+import { ChatProvider } from "./contexts/ChatContext.jsx";
 
-function App() {
+export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [token, setToken] = useState(null);
 
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
     if (storedToken) {
-      setToken(storedToken);
       setIsLoggedIn(true);
     }
   }, []);
 
   const handleLoginSuccess = () => {
-    const savedToken = localStorage.getItem("token");
-    if (savedToken) {
-      setToken(savedToken);
-      setIsLoggedIn(true);
-    }
+    setIsLoggedIn(true);
   };
 
   return isLoggedIn ? (
-    <ChatbotUI token={token} />
+    <ChatProvider>
+      <ChatbotUI />
+    </ChatProvider>
   ) : (
     <LoginPage onLogin={handleLoginSuccess} />
   );
 }
-
-export default App;

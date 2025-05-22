@@ -41,7 +41,7 @@ async def validate_token_from_query(websocket: WebSocket):
     headers = {"Authorization": f"Bearer {token}"}
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(f"{IDENTITY_URL}/validate-token", headers=headers)
+            response = await client.get(f"{IDENTITY_URL}validate-token", headers=headers)
             if response.status_code != 200:
                 await websocket.close(code=1008)
                 return None

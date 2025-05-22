@@ -1,27 +1,23 @@
-import redis
+from redis.asyncio import Redis
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-redis_host = os.getenv("REDIS_HOST")
-redis_port = os.getenv("REDIS_PORT")
-redis_db = os.getenv("REDIS_DB")
+redis_host = os.getenv("REDIS_HOST", "localhost")
+redis_port = int(os.getenv("REDIS_PORT"))
+redis_db = int(os.getenv("REDIS_DB"))
 
-def get_redis_client():
-    """Create a Redis client instance."""
+redis_client = Redis(
+    host=redis_host,
+    port=redis_port,
+    db=redis_db,
+    decode_responses=True
+)
+
+async def test_redis_connection():
     try:
-        client = redis.StrictRedis(
-            host=redis_host,
-            port=redis_port,
-            db=redis_db,
-            decode_responses=True
-        )
-        client.ping() 
-        print(f"Kết nối Redis thành công tại {redis_host}:{redis_port} (db {redis_db})")
-        return client
-    except redis.ConnectionError as e:
-        print(f"Không thể kết nối đến Redis: {e}")
-        return None
-
-redis_client = get_redis_client()
+        await redis_client.ping()
+        print(f"✅ Redis connected at {redis_host}:{redis_port} (db {redis_db})")
+    except Exception as e:
+        print(f"❌ Redis connection failed: {e}")

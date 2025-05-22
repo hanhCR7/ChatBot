@@ -16,7 +16,7 @@ async def send_otp_email(request: OTPRequest, db: Session = Depends(get_db)):
             "message": "Email OTP được gửi thành công"
         }
     except Exception as e:
-        return HTTPException(status_code=500, detail=f"Error sending OTP email: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error sending OTP email: {str(e)}")
 @router.post("/validate-otp/", status_code=status.HTTP_200_OK)
 async def validate_otp_api(request: VerifyOTPRequest, db: Session = Depends(get_db)):
     is_valid = await validate_otp(request.user_id, request.otp, db)

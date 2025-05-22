@@ -1,22 +1,21 @@
-import openai
+from openai import AsyncOpenAI
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-#Gọi OpenAI API để lấy phản hồi từ mô hình
+# Gọi OpenAI API để lấy phản hồi từ mô hình (stream)
 async def generate_response(chatlog):
-    return openai.ChatCompletion.create(
+    return await client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=chatlog,
         temperature=0.7,
         max_tokens=1500,
-        n=1,
-        stop=None,
-        stream=True,
+        stream=True
     )
-#Gọi OpenAI để tự tạo tiêu đề từ tin nhăn đầu tiên
+
+# Gọi OpenAI để tự tạo tiêu đề từ tin nhắn đầu tiên
 async def generate_title(first_user_message: str) -> str:
     system_prompt = {
         "role": "system",
@@ -30,13 +29,12 @@ async def generate_title(first_user_message: str) -> str:
         }
     ]
     try:
-        response = openai.ChatCompletion.create(
+        response = await client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=message,
             temperature=0.7,
             max_tokens=1500,
-            n=1,
-            stop=None
+            stream=False
         )
         return response.choices[0].message.content.strip()
     except Exception as e:

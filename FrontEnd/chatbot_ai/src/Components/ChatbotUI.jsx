@@ -34,7 +34,7 @@ export default function ChatbotUI() {
   console.log("✅ Token passed to useChatSocket:", token);
 
   // ✅ Gọi WebSocket hook
-  const { messages, sendMessage, connected } = useChatSocket(activeId, token, setConversations);
+  const { messages, sendMessage, connected, isTyping } = useChatSocket(activeId, token, setConversations);
 
   const handleSendMessage = () => {
   if (!connected) {
@@ -96,11 +96,11 @@ export default function ChatbotUI() {
         <div className="flex-none">
           <ChatHeader title={conversations.find(c => c.id === activeId)?.title || 'ChatBot'} />
         </div>
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2">
           {messages.length === 0 ? (
             <Suggestions onPromptClick={setInputValue} />
           ) : (
-            <ChatMessages messages={messages} isTyping={false} />
+            <ChatMessages messages={messages} isTyping={isTyping} connected={connected} />
           )}
         </div>
         <div className="flex-none">

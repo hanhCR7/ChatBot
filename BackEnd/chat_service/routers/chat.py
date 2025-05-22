@@ -1,11 +1,10 @@
 import contextlib
-import datetime
 import uuid
-from service import redis_client
+from service.redis_client import redis_client
 import openai
 import os
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from datetime import datetime
 from typing import List
 from db_config import db_dependency
 from schemas import ChatSessionCreate, ChatSessionUpdate, ChatSessionOut, AddMessage, ChatHistoryOut, MessageOut
@@ -73,6 +72,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: uuid.UUID, db: db_de
         if not user_data:
             return
         user_id = user_data.get("user_id")
+        print("🔑 User ID:", user_id, "📩 Chat ID:", chat_id)
         await sync_strike_from_db(user_id, db)
     except JWTError:
         await websocket.close(code=1008)
@@ -90,10 +90,10 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: uuid.UUID, db: db_de
         while True:
             user_input = await websocket.receive_text()
             ban_key = f"chat_ban:{user_id}"
-            if redis_client.exists(ban_key):
+            if await redis_client.exists(ban_key):
                 await websocket.send_text("Bạn đang bị cấm chat tạm thời do vi phạm nội dung.")
                 continue
-            if contains_violation(user_input):
+            if await contains_violation(user_input):
                 await websocket.send_text("Tin nhắn của bạn chứa từ ngữ vi phạm. Vui lòng không sử dụng ngôn từ này.")
                 await process_violation(websocket, user_input, db, user_data)
                 continue
@@ -115,8 +115,9 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: uuid.UUID, db: db_de
             buffer = ""
             reply_timestamp = datetime.utcnow()
             async for chunk in stream:
-                if chunk.choices[0].delta.get("content"):
-                    text = chunk.choices[0].delta["content"]
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    text = delta.content
                     assistant_reply += text
                     buffer += text
                     if any(text.endswith(punct) for punct in [".", "!", "?", "…", "。", "！", "？"]):
@@ -141,7 +142,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: uuid.UUID, db: db_de
             chat_log.append({"role": "assistant", "content": assistant_reply})
             # ✅ Cập nhật tiêu đề nếu là tin nhắn đầu tiên
             if chat_session.title == "New Chat":
-                new_title = generate_title(user_input)
+                new_title = await generate_title(user_input)
                 update_chat_session(db, chat_id, ChatSessionUpdate(title=new_title))
                 await websocket.send_json({
                     "role": "system",

@@ -17,28 +17,26 @@ SMTP_SERVER = os.getenv("SMTP_SERVER")
 SMTP_PORT = int(os.getenv("SMTP_PORT"))
 SMTP_FROM = os.getenv("SMTP_FROM")
 
-# Tạo một client SMTP dùng lại
-smtp_client = aiosmtplib.SMTP(
-    hostname=SMTP_SERVER,
-    port=SMTP_PORT,
-    username=SMTP_USERNAME,
-    password=SMTP_PASSWORD,
-    start_tls=True,
-    timeout=30
-)
 async def send_email(db: Session, recipient: str, subject: str, body: str):
-    """Gửi email bất đồng bộ với SMTP client dùng lại."""
+    """Gửi email bất đồng bộ - tạo SMTP client mỗi lần để tránh lỗi kết nối"""
     msg = MIMEMultipart()
     msg["From"] = SMTP_FROM
     msg["To"] = recipient
     msg["Subject"] = subject
     msg.attach(MIMEText(body, "html"))
 
+    status = "Unknown"
     try:
-        if not smtp_client.is_connected:
-            await smtp_client.connect(timeout=10)
-            await smtp_client.login(SMTP_USERNAME, SMTP_PASSWORD)
-
+        smtp_client = aiosmtplib.SMTP(
+            hostname=SMTP_SERVER,
+            port=SMTP_PORT,
+            username=SMTP_USERNAME,
+            password=SMTP_PASSWORD,
+            start_tls=True,
+            timeout=15  # Giới hạn mỗi lần gửi
+        )
+        await smtp_client.connect()
+        await smtp_client.login(SMTP_USERNAME, SMTP_PASSWORD)
         await smtp_client.send_message(msg)
         status = "Success"
     except aiosmtplib.errors.SMTPServerDisconnected:
@@ -51,12 +49,11 @@ async def send_email(db: Session, recipient: str, subject: str, body: str):
         status = f"Lỗi khác: {str(e)}"
     finally:
         try:
-            if smtp_client.is_connected:
-                await smtp_client.quit()
+            await smtp_client.quit()
         except:
             pass
 
-    # Lưu log vào database
+    # Lưu log
     email_log = EmailLogs(
         recipient=recipient,
         subject=subject,
@@ -67,5 +64,8 @@ async def send_email(db: Session, recipient: str, subject: str, body: str):
     db.add(email_log)
     db.commit()
 
-    print(f"[EMAIL] Sent to: {recipient} | Status: {status}") 
-    return status == "Success"
+    print(f"[EMAIL] Sent to: {recipient} | Status: {status}")
+    if status != "Success":
+        raise Exception(status)  # raise lỗi để tầng gọi xử lý đúng
+    return True
+

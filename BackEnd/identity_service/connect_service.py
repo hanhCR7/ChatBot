@@ -145,17 +145,25 @@ async def send_user_lock_notification(recipient: str, username: str):
             raise HTTPException(status_code=500, detail=f"Lỗi khi gửi mail thông báo: {repr(e)}")
 # Send Email OTP
 async def send_email_otp(user_id: int, email: str):
-    async with httpx.AsyncClient() as client:
+    timeout = httpx.Timeout(15.0, connect=5.0)  # 15 seconds for the request, 5 seconds for connection
+    async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.post(
                 f'{EMAIL_SERVICE_URL}send-otp-email/',
                 json={"user_id": user_id, "email": email}
             )
+            print(f"[OTP Email] Status: {response.status_code}, Response: {response.text}")
             if response.status_code == 200:
                 return response.json()
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Gửi OTP thất bại. Phản hồi từ service: {response.text}"
+                )
         except httpx.RequestError as e:
             print(f"Loi connect: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Lỗi khi gửi mail thông báo: {repr(e)}")
+
 # Validate OTP
 async def validate_otp(user_id: int, otp: str):
     async with httpx.AsyncClient() as client:
