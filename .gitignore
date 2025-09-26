@@ -1,0 +1,6 @@
+BackEnd/chat_service/.env
+BackEnd/email_service/.env
+BackEnd/identity_service/.env
+BackEnd/user_service/.env
+FrontEnd/chat-ai-master/.env
+*.log
