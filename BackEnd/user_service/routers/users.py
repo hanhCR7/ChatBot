@@ -23,7 +23,7 @@ from user_schemas import (
 router = APIRouter(prefix="/api/user_service",tags=["users"])
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
-@router.get("/user/all-user", status_code=status.HTTP_200_OK)
+@router.get("/all-users", status_code=status.HTTP_200_OK)
 async def get_all_user(db: db_dependency, current_user: dict = Depends(validate_token_user)):
     """Chỉ có Admin mới có thể xem tất cả các User."""
     if current_user["role"] != "Admin":
@@ -99,8 +99,6 @@ async def update_user(user_id: int, update_user: UpdateUserRequest, db: db_depen
     user.last_name = update_user.last_name
     user.username = update_user.username
     user.email = update_user.email
-    if update_user.password_hash:
-        user.password_hash = hash_password(update_user.password_hash)
     user.status = update_user.status
     db.commit()
     db.refresh(user)
@@ -248,7 +246,8 @@ async def generate_activation_token(request: ActivationTokenRequest, db: db_depe
     db.commit()
     db.refresh(user)
     return {
-        "details": "Tạo token kích hoạt thành công!"
+        "details": "Tạo token kích hoạt thành công!",
+        "activation_token": activation_token
     }
 @router.get("/activate", status_code=status.HTTP_200_OK)
 async def activate_user(token: str, db: db_dependency):
@@ -294,3 +293,24 @@ async def update_password(request: UpdatePasswordResquest, db: db_dependency, se
     return {
         "details": "Cập nhật mật khẩu thành công!"
     }
+@router.get("/me", response_model=UserResponse, status_code=status.HTTP_200_OK)
+async def get_current_user_info(db: db_dependency, current_user: dict = Depends(validate_token_user)):
+    """Lấy thông tin người dùng hiện tại."""
+    user_obj = db.query(Users).filter(Users.id == current_user["user_id"]).first()
+    if not user_obj:
+        raise HTTPException(status_code=404, detail="User không tồn tại")
+
+    return user_obj
+@router.get("/me/admin", response_model=UserResponse)
+async def get_current_user_info(
+    db: db_dependency,
+    current_user: dict = Depends(validate_token_user)
+):
+    if current_user["role"] != "Admin":
+        raise HTTPException(status_code=403, detail="Không có quyền")
+
+    user_obj = db.query(Users).filter(Users.id == current_user["user_id"]).first()
+    if not user_obj:
+        raise HTTPException(status_code=404, detail="User không tồn tại")
+
+    return user_obj

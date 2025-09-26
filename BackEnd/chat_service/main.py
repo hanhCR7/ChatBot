@@ -1,12 +1,15 @@
 from fastapi import FastAPI
-from routers import chat, baned_keyword
+from routers import chat, baned_keyword, image
 from db_config import Base, engine
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 Base.metadata.create_all(bind=engine)
-app = FastAPI(title="Email Service API")
+app = FastAPI(title="ChatBot Service API")
 # Gắn router
 app.include_router(chat.router)
 app.include_router(baned_keyword.router)
+app.include_router(image.router)
+app.mount("/static/images", StaticFiles(directory="upload/images"), name="images")
 # Cấu hình CORS
 app.add_middleware(
     CORSMiddleware,

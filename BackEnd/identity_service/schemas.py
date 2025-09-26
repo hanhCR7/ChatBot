@@ -30,7 +30,6 @@ class RolePermissionResponse(BaseModel):
     class Config:
         from_attributes  = True
 class UserRoleRequest(BaseModel):
-    user_id: int
     role_name: str
 class UserRoleResponse(BaseModel):
     user_id: int
@@ -91,6 +90,9 @@ class SignUp(BaseModel):
 class VerifyOTP(BaseModel):
     user_id: int
     otp: str
+
+class ResendOTP(BaseModel):
+    user_id: int
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
 class ResetPasswordToken(BaseModel):

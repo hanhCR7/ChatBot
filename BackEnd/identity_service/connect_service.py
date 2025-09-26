@@ -5,11 +5,11 @@ from fastapi import Depends, HTTPException
 from dotenv import load_dotenv
 import os
 import httpx
-USER_SERVICE_URL = os.getenv('USER_SERVICE_URL')
-EMAIL_SERVICE_URL = os.getenv('EMAIL_SERVICE_URL')
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/identity_service/login")
 load_dotenv()
+USER_SERVICE_URL = os.getenv('USER_SERVICE_URL')
+EMAIL_SERVICE_URL = os.getenv('EMAIL_SERVICE_URL')
 SERVICE_KEY = os.getenv('SERVICE_KEY')
 def hash_password( password: str) -> str:
     return bcrypt_context.hash(password)
@@ -110,21 +110,32 @@ async def generate_activation_token(user_id: int):
     headers = {"X-API-Key": SERVICE_KEY}
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(f'{USER_SERVICE_URL}generate-activation-token', 
+            response = await client.post(
+                f'{USER_SERVICE_URL}generate-activation-token',
                 json={"user_id": user_id},
                 headers=headers
             )
             if response.status_code == 200:
-                return response.json()
+                data = response.json()
+                if "activation_token" not in data:
+                    raise HTTPException(status_code=500, detail="Phản hồi không chứa activation_token")
+                return data
+            else:
+                # Log lỗi hoặc raise cụ thể hơn
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"User Service trả về lỗi: {response.text}"
+                )
         except httpx.RequestError as e:
             raise HTTPException(status_code=500, detail=f"Lỗi khi gửi tạo activation token: {repr(e)}")
+
 # COnnect to email service
-async def active_account(user_id: int, email: str, activation_token: str):
+async def active_account(username: str, email: str, activation_token: str):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(
                 f'{EMAIL_SERVICE_URL}send-activation-email/',
-                json={"user_id": user_id, "recipient": email, "activation_token": activation_token}
+                json={"username": username, "recipient": email, "activation_token": activation_token}
             )
             if response.status_code == 200:
                 return response.json()
@@ -188,16 +199,22 @@ async def send_reset_password_email(email: str, reset_link: str):
                 return response.json()
         except httpx.RequestError as e:
             raise HTTPException(status_code=500, detail=f"Lỗi khi gửi mail thông báo: {repr(e)}")
-# Lấy thông tin user qua email
 async def get_user_by_email(email: str):
+    headers = {"X-API-Key": SERVICE_KEY}
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(f'{USER_SERVICE_URL}users/get-user-by-email/{email}')
-            if response.status_code == 200:
-                return response.json()
-            raise Exception(f"Request error: {response.text}")
+            response = await client.get(f'{USER_SERVICE_URL}users/get-user-by-email/{email}', headers=headers)
         except httpx.RequestError as e:
-            raise HTTPException(status_code=500, detail=f"Lỗi khi gửi mail thông báo: {repr(e)}")
+            # Lỗi network / timeout
+            raise HTTPException(status_code=500, detail=f"Lỗi kết nối đến user service: {repr(e)}")
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 404:
+            # User không tồn tại → trả về 404
+            return None
+        else:
+            # Lỗi khác từ user service
+            raise HTTPException(status_code=500, detail=f"Lỗi từ user service: {response.text}")
 # Cập nhật mật khẩu từ user service
 async def reset_update_password(user_id: int, new_password: str, confirm_password: str):
     headers = {"X-API-Key": SERVICE_KEY}

@@ -1,31 +1,30 @@
 from service.redis_client import redis_client
-from db_config import db_dependency
+from db_config import SessionLocal, db_dependency
 from models import BanedKeywords
 
 BANNED_KEYWORDS_KEY = "banned_keywords"
 BANNED_KEYWORDS_TTL = 3600  # TTL 1 giờ
 
 async def load_keywords_from_cache():
-    if not redis_client:
-        return []
+    """Lấy danh sách từ khóa vi phạm trực tiếp từ DB"""
+    db = SessionLocal()
+    try:
+        # Lấy tất cả keyword từ bảng BanedKeywords
+        keywords = db.query(BanedKeywords.keyword).all()
+        # db.query trả về list tuple, nên chuyển sang list str
+        return [k[0] for k in keywords]
+    finally:
+        db.close()
 
-    exists = await redis_client.exists(BANNED_KEYWORDS_KEY)
-    if not exists:
-        return []
-
-    keywords = await redis_client.smembers(BANNED_KEYWORDS_KEY)
-    return list(keywords)
-
-async def refresh_keywords_cache(db: db_dependency):
-    """Làm mới cache từ khóa vi phạm."""
-    if not redis_client:
-        return False
-
-    await redis_client.delete(BANNED_KEYWORDS_KEY)
-
-    keywords = db.query(BanedKeywords).all()
-    if keywords:
-        await redis_client.sadd(BANNED_KEYWORDS_KEY, *[kw.keyword for kw in keywords])
-        await redis_client.expire(BANNED_KEYWORDS_KEY, BANNED_KEYWORDS_TTL)
-
-    return True
+async def refresh_keywords_cache():
+    db = SessionLocal()
+    try:
+        await redis_client.delete(BANNED_KEYWORDS_KEY)
+        keywords = db.query(BanedKeywords.keyword).all()
+        keywords = [k[0] for k in keywords]  # convert từ tuple sang str
+        if keywords:
+            await redis_client.sadd(BANNED_KEYWORDS_KEY, *keywords)
+            await redis_client.expire(BANNED_KEYWORDS_KEY, BANNED_KEYWORDS_TTL)
+        print("🔄 Refreshed banned keywords in Redis:", keywords)
+    finally:
+        db.close()

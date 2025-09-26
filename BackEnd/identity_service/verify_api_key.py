@@ -1,6 +1,7 @@
 from fastapi import Header, HTTPException
 import os
 from dotenv import load_dotenv
+from httpcore import request
 load_dotenv()
 API_KEY = os.getenv("SERVICE_KEY")
 async def verify_api_key(api_key: str = Header(None, alias="X-API-Key")):

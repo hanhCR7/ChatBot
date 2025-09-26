@@ -13,7 +13,7 @@ async def read_permissions(db: db_dependency, current_user: dict = Depends(get_c
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập vào tài nguyên này")
     list_permission = db.query(Permission).all()
     permission_list_response = [PermissionResponse.from_orm(permission) for permission in list_permission]
-    log_user_action( current_user["user_id"], f"{current_user["username"]}: Đã xem danh sách quyền.")
+    await log_user_action( current_user["user_id"], f"{current_user['username']}: Đã xem danh sách quyền.")
     return {
         "details": "Danh sách quyền: ",
         "permissions": permission_list_response  # Cải thiện tên key trả về
@@ -28,7 +28,7 @@ async def create_permission(permission_request: PermissionRequest, db: db_depend
     db.add(new_permission)
     db.commit()
     db.refresh(new_permission)  # Đồng bộ lại permission mới vào db
-    log_user_action(current_user["user_id"], f"{current_user['username']}: Đã tạo quyền {new_permission.name}.")
+    await log_user_action(current_user["user_id"], f"{current_user['username']}: Đã tạo quyền {new_permission.name}.")
     return {
         "detail": "Quyền đã được tạo thành công",
         "permission": PermissionResponse.from_orm(new_permission)
@@ -46,7 +46,7 @@ async def update_permission(permission_id: int, permission_request: PermissionRe
     permission_to_update.description = permission_request.description
     db.commit()
     db.refresh(permission_to_update)  # Đồng bộ lại permission mới vào db
-    log_user_action(current_user["user_id"], f"{current_user['username']}: Đã cập nhật quyền {permission_to_update.name}.")
+    await log_user_action(current_user["user_id"], f"{current_user['username']}: Đã cập nhật quyền {permission_to_update.name}.")
     return {
         "detail": "Quyền đã cập nhật thành công!",
         "permission": PermissionResponse.from_orm(permission_to_update)
@@ -62,7 +62,7 @@ async def delete_permission(permission_id: int, db: db_dependency, current_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quyền không tồn tại")
     db.delete(permission_to_delete)
     db.commit()
-    log_user_action(current_user["user_id"], f"{current_user['username']}: Đã xóa quyền {permission_to_delete}.")
+    await log_user_action(current_user["user_id"], f"{current_user['username']}: Đã xóa quyền {permission_to_delete}.")
     return {
         "detail": "Quyền đã được xóa thành công!",
         "permission_id": permission_id

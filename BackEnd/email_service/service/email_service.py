@@ -30,9 +30,7 @@ async def send_email(db: Session, recipient: str, subject: str, body: str):
         smtp_client = aiosmtplib.SMTP(
             hostname=SMTP_SERVER,
             port=SMTP_PORT,
-            username=SMTP_USERNAME,
-            password=SMTP_PASSWORD,
-            start_tls=True,
+            start_tls=False,
             timeout=15  # Giới hạn mỗi lần gửi
         )
         await smtp_client.connect()

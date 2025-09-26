@@ -2,13 +2,15 @@ import os
 import asyncio
 import uuid
 from dotenv import load_dotenv
+from fastapi.responses import JSONResponse
 import jwt
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Cookie
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
+from typing import Optional
 from sqlalchemy.orm import Session
-from schemas import SignUp, Login, ChangePassword, VerifyOTP, ResetPasswordRequest, ResetPasswordToken
+from schemas import ResendOTP, SignUp, Login, ChangePassword, VerifyOTP, ResetPasswordRequest, ResetPasswordToken
 from models import Role, UserRole, PasswordResetToken, OTPAttempts
 from databases import get_db
 from auth_per import get_current_user
@@ -63,17 +65,14 @@ def verify_refresh_token(token: str):
         raise HTTPException(status_code=500, detail=f"Lỗi: {e}")
 
 @router.post("/login", status_code=status.HTTP_200_OK, dependencies=[Depends(rate_limiters(redis_clients, "login"))])
-async def login(login: Login, request: Request):
+async def login(login: Login):
     """Trang đăng nhập
     Khi đăng nhập user sẽ được nhận một mã OTP qua email để xác minh
     """  
     # Lấy địa chỉ IP của người dùng
-    client_ip = request.headers.get("X-Forwarded-For", request.client.host)
-    print(f"Địa chỉ IP của người dùng: {client_ip}")
     user_response = await get_user_with_password(login.username, login.password)
-    print(f"User response: {user_response}")
     if not user_response:
-        raise HTTPException(status_code=404, detail="Tài khoản hoặc mật khẩu không đúng.")
+        raise HTTPException(status_code=401, detail="Tài khoản hoặc mật khẩu không đúng.")
     user_id = user_response.get('user_id')
     username = user_response.get('username')
     is_active = user_response.get("is_active")
@@ -115,20 +114,28 @@ async def verify_otp(request: VerifyOTP, db: Session = Depends(get_db)):
     access_token = create_access_token(data={"sub": str(request.user_id), "role": role.role.name, "username": user_data.get("username")})
     refresh_token = create_access_token(data={"sub": str(request.user_id), "role": role.role.name, "username": user_data.get("username")}, expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
     redis_clients.setex(f"refresh_token:{request.user_id}", timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS), refresh_token)
-    await log_user_action(request.user_id, f"{user_data.get('username')} đã đăng nhập thành công!")
-    return {
+    await update_last_login(request.user_id)
+    response = JSONResponse(content={
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "token_type": "bearer", 
-        "username": user_data.get("username")
-    }
+        "token_type": "bearer",
+    })
+    response.set_cookie(
+        key="refresh_token", 
+        value=refresh_token, 
+        httponly=True, 
+        secure=True, 
+        samesite="Lax", 
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+    )
+    await log_user_action(request.user_id, f"{user_data.get('username')} đã đăng nhập thành công!")
+    return response
 @router.post("/sign_up", status_code=status.HTTP_201_CREATED, dependencies=[Depends(rate_limiters(redis_clients, "sign_up"))])
 async def sign_up(sign_up: SignUp, db: Session = Depends(get_db)):
     """Trang đăng ký"""
     user_response = await sign_up_user(
         sign_up.first_name, sign_up.last_name, sign_up.username, sign_up.email, sign_up.password
     )
-    print("User response:", user_response)
     if not user_response or "user" not in user_response or "id" not in user_response["user"]:
         raise HTTPException(status_code=500, detail="Lỗi: Không lấy được user_id từ User Service")
     role = db.query(Role).filter(Role.name == "User").first()
@@ -139,7 +146,7 @@ async def sign_up(sign_up: SignUp, db: Session = Depends(get_db)):
     if not activation_response or "activation_token" not in activation_response:
         raise HTTPException(status_code=500, detail="Lỗi tạo token kích hoạt")
     activation_token = activation_response["activation_token"]
-    email_response = await active_account(user_id,sign_up.email, activation_token)
+    email_response = await active_account(sign_up.username,sign_up.email, activation_token)
     if not email_response or email_response.get("status") != "success":
         raise HTTPException(status_code=500, detail="Lỗi kích hoạt tài khoản")
     await log_user_action(user_id, f"{sign_up.username} đã đăng ký thành công!")
@@ -167,7 +174,7 @@ async def change_password(request: ChangePassword, current_user: dict = Depends(
         "message": "Đổi mật khẩu thành công"
     }
 @router.post('/logout', status_code=status.HTTP_200_OK)
-async def logout(token: str = Depends(oauth2_scheme), current_user: dict = Depends(get_current_user)):
+async def logout(response: Response, token: str = Depends(oauth2_scheme), current_user: dict = Depends(get_current_user), refresh_token: str = Cookie(None)):
     """Trang đăng xuất"""
     decoded_token = decode_token(token)  
     if not decoded_token:
@@ -175,6 +182,9 @@ async def logout(token: str = Depends(oauth2_scheme), current_user: dict = Depen
     expire_time = decoded_token.get("exp") - datetime.utcnow().timestamp()
     if expire_time > 0:
         redis_clients.setex(f"blacklist:{token}", int(expire_time), "blacklisted")
+    if refresh_token:
+        redis_clients.delete(f"refresh_token:{current_user['user_id']}")
+        response.delete_cookie("refresh_token")
     await log_user_action(current_user["user_id"], f"{current_user['username']} đã đăng xuất thành công!")
     return {
         "detail": "Đăng xuất thành công!"
@@ -208,7 +218,7 @@ async def validate_token(token: str = Depends(oauth2_scheme), db: Session = Depe
     }
 # Refresh Token
 @router.post("/refresh-token", status_code=status.HTTP_200_OK)
-async def refresh_token(response: Response, refresh_token: str):
+async def refresh_token(response: Response, refresh_token: Optional[str] = Cookie(None)):
     """Tạo mới access token bằng refresh token"""
     user_response = verify_refresh_token(refresh_token)
     if not user_response:
@@ -274,4 +284,20 @@ async def reset_password(resquest: ResetPasswordToken, db: Session = Depends(get
     await log_user_action(user_id, f"{user_id} đã đặt lại mật khẩu thành công!")
     return {
         "message": "Mật khẩu đã được đặt lại thành công. Hãy quay lại trong login tiếp tục!"
+    }
+@router.post("/resend-otp", status_code=status.HTTP_200_OK, dependencies=[Depends(rate_limiters(redis_clients, "resend_otp"))])
+async def resend_otp(request: ResendOTP, db: Session = Depends(get_db)):
+    """Trang gửi lại mã OTP"""
+    user_response = await get_user(request.user_id)
+    if not user_response or "user" not in user_response:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại")
+    email = user_response["user"].get("email")
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email không hợp lệ.")
+    otp_required = await send_email_otp(request.user_id, email)
+    if not otp_required or otp_required.get("status") != "success":
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Không thể gửi mã OTP. Vui lòng thử lại sau.")
+    return {
+        "status": "success",
+        "message": "Mã OTP đã được gửi lại đến email của bạn."
     }

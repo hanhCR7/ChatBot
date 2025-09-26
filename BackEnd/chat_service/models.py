@@ -40,3 +40,11 @@ class ViolationStrike(Base):
     user_id = Column(Integer, unique=True, nullable=False)
     strike_count = Column(Integer, default=1)
     last_updated = Column(DateTime, default=datetime.datetime.utcnow)
+
+class Image(Base):
+    __tablename__ = 'images'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False)
+    url = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

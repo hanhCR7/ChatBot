@@ -10,8 +10,9 @@ class ChatSessionBase(BaseModel):
     title: str = "New Chat"
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 class ChatSessionCreate(BaseModel):
     user_id: Optional[int] = None
@@ -38,8 +39,9 @@ class MessageOut(BaseModel):
     content: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 # ========== Full Chat History ==========
 
@@ -50,8 +52,9 @@ class ChatHistoryOut(BaseModel):
 class BanedKeywordOut(BaseModel):
     id: int
     keyword: str
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 class BanedKeywordCreate(BaseModel):
     keyword: str
 
@@ -67,8 +70,9 @@ class ViolationLogOut(BaseModel):
     level: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 class ViolationStrikeOut(BaseModel):
     id: int
@@ -76,9 +80,67 @@ class ViolationStrikeOut(BaseModel):
     strike_count: int
     last_updated: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 class ViolationStrikeCreate(BaseModel):
     user_id: int
     strike_count: int
     last_updated: Optional[datetime] = None
+
+class ImageCreate(BaseModel):
+    user_id: int
+    url: str
+    description: Optional[str] = None
+
+class ImageOut(BaseModel):
+    id: int
+    user_id: int
+    url: str
+    description: Optional[str] = None
+    created_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+class UpdateImageDescription(BaseModel):
+    description: str
+
+class SessionSummary(BaseModel):
+    chat_id: UUID
+    title: str
+    created_at: datetime
+    message_count: int
+
+class AllChatUsersOut(BaseModel):
+    user_id: int
+    username: Optional[str] = None
+    email: Optional[str] = None
+    sessions: List[SessionSummary]
+
+class Pagination(BaseModel):
+    total: int
+    page: int
+    limit: int
+
+class AllChatUsersResponse(BaseModel):
+    data: List[AllChatUsersOut]
+    pagination: Pagination
+
+class SessionWithMessageOut(BaseModel):
+    id: UUID
+    title: Optional[str] = None
+    created_at: datetime
+    message: List[MessageOut]
+    model_config = {
+        "from_attributes": True
+    }
+
+class UserDetailOut(BaseModel):
+    user_id: int
+    username: Optional[str] = None
+    email: Optional[str] = None
+    sessions: List[SessionWithMessageOut]
+    model_config = {
+        "from_attributes": True
+    }

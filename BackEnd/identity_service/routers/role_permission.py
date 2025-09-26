@@ -12,7 +12,7 @@ async def read_role_permission(db: db_dependency, current_user: dict = Depends(g
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập vào tài nguyên này") 
     list_role_permission = db.query(RolePermission).all()
     role_permission_list_response = [RolePermissionResponse.from_orm(role_permission) for role_permission in list_role_permission]
-    log_user_action(current_user["user_id"], f"{current_user["username"]}: Đã xem danh sách vai trò - quyền")
+    await log_user_action(current_user["user_id"], f"{current_user['username']}: Đã xem danh sách vai trò - quyền")
     return {
         "details": "Danh sách vai trò - quyền",
         "role_permission": role_permission_list_response
@@ -33,7 +33,7 @@ async def create_role_permission(role_permission_request: RolePermissionRequest,
     db.add(new_role_permission)
     db.commit()
     db.refresh(new_role_permission)
-    log_user_action(current_user["user_id"], f"{current_user['username']}: Đã tạo vai trò - quyền {role_permission_request.role_name} - {role_permission_request.permission_name}")
+    await log_user_action(current_user["user_id"], f"{current_user['username']}: Đã tạo vai trò - quyền {role_permission_request.role_name} - {role_permission_request.permission_name}")
     return {
         "detail": "Vai trò-quyền đã được tạo thành công",
         "role_permission": RolePermissionResponse.from_orm(new_role_permission)
@@ -46,15 +46,24 @@ async def update_role_permission(role_permission_id: int, role_permission_reques
     role_permission_to_update = db.query(RolePermission).filter(RolePermission.id == role_permission_id).first()
     if not role_permission_to_update:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vai trò - quyền không tồn tại!")
-    role_permission_to_update.role_id = role_permission_request.role_id
-    role_permission_to_update.permission_id = role_permission_request.permission_id
+    # ✅ Tra lại ID của role và permission từ tên
+    role = db.query(Role).filter(Role.name == role_permission_request.role_name).first()
+    permission = db.query(Permission).filter(Permission.name == role_permission_request.permission_name).first()
+    if not role or not permission:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vai trò hoặc quyền không tồn tại!")
+    role_permission_to_update.role_id = role.id
+    role_permission_to_update.permission_id = permission.id
     db.commit()
     db.refresh(role_permission_to_update)
-    log_user_action(current_user["user_id"], f"{current_user['username']}: Đã cập nhật vai trò - quyền {role_permission_request.role_name} - {role_permission_request.permission_name}")
+    await log_user_action(
+        current_user["user_id"],
+        f"{current_user['username']}: Đã cập nhật vai trò - quyền {role.name} - {permission.name}"
+    )
     return {
         "detail": "Quyền vai trò đã được cập nhật thành công",
         "role_permission": RolePermissionResponse.from_orm(role_permission_to_update)
     }
+
 @router.delete('/role-permission/{role_permission_id}', status_code=status.HTTP_200_OK)
 async def delete_role_permission(role_permission_id: int, db: db_dependency, current_user: dict = Depends(get_current_user)):
     """Chỉ có Admin hoặc User được phân quyền mới có thể xóa quyền cho vai trò"""
@@ -65,7 +74,7 @@ async def delete_role_permission(role_permission_id: int, db: db_dependency, cur
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vai trò - quyền không tồn tại!")
     db.delete(role_permission_to_delete)
     db.commit()
-    log_user_action(current_user["user_id"], f"{current_user['username']}: Đã xóa vai trò - quyền {role_permission_id}")
+    await log_user_action(current_user["user_id"], f"{current_user['username']}: Đã xóa vai trò - quyền {role_permission_id}")
     return {
         "detail": "Đã xóa thành công quyền vai trò",
         "role_permission_id": role_permission_id

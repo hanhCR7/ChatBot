@@ -12,7 +12,7 @@ async def read_roles(db: db_dependency, current_user: dict = Depends(get_current
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập vào tài nguyên này")
     list_role = db.query(Role).all()
     role_list_response = [RoleResponse.from_orm(role) for role in list_role]
-    log_user_action(current_user["user_id"], f"{current_user["username"]}: Đã xem danh sách vai trò!")
+    await log_user_action(current_user["user_id"], f"{current_user["username"]}: Đã xem danh sách vai trò!")
     return {
         "details": "Danh sách vai trò: ",
         "roles": role_list_response
@@ -26,7 +26,7 @@ async def create_role(role_request: RoleRequest, db: db_dependency, current_user
     db.add(new_role)
     db.commit()
     db.refresh(new_role) 
-    log_user_action(current_user["user_id"], f"{current_user['username']}: Đã tạo vai trò: {new_role.name}!")
+    await log_user_action(current_user["user_id"], f"{current_user['username']}: Đã tạo vai trò: {new_role.name}!")
     return {
         "detail": "Vai trò đã được tạo thành công!",
         "role": RoleResponse.from_orm(new_role)
@@ -43,7 +43,7 @@ async def update_role(role_id: int, role_request: RoleRequest, db: db_dependency
     role_to_update.description = role_request.description
     db.commit()
     db.refresh(role_to_update) 
-    log_user_action(current_user["user_id"], f"{current_user['username']}: Đã cập nhật vai trò: {role_to_update.name}!")
+    await log_user_action(current_user["user_id"], f"{current_user['username']}: Đã cập nhật vai trò: {role_to_update.name}!")
     return {
         "detail": "Vai trò đã được cập nhật thành công!",
         "role": RoleResponse.from_orm(role_to_update)
@@ -58,7 +58,7 @@ async def delete_role(role_id: int, db: db_dependency, current_user: dict = Depe
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vai trò không tồn tại!")
     db.delete(role_to_delete)
     db.commit()
-    log_user_action(current_user["user_id"], f"{current_user['username']}: Đã xóa vai trò: {role_to_delete}!")
+    await log_user_action(current_user["user_id"], f"{current_user['username']}: Đã xóa vai trò: {role_to_delete}!")
     return {
         "detail": "Vai trò đã được xóa thành công!",
         "role_id": role_id

@@ -10,7 +10,7 @@ class EmailResponse(BaseModel):
     message: str
 
 class ActivationEmailRequest(BaseModel):
-    user_id: int
+    username: str
     recipient: EmailStr
     activation_token: str
 class OTPRequest(BaseModel):
@@ -30,4 +30,4 @@ class UserLockNotification(BaseModel):
 class ViolationLockEmailRequest(BaseModel):
     recipient: EmailStr
     username: str
-    ban_duration: str  # e.g., "5 minutes", "1 hour", "1 day"
+    ban_duration: str

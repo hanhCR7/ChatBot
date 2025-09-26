@@ -11,27 +11,51 @@ router = APIRouter(prefix="/api/user_service",tags=["logs"])
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
 @router.get("/logs", status_code=status.HTTP_200_OK)
-async def get_logs(db: db_dependency, current_user: dict = Depends(validate_token_user)):
+async def get_logs(db: db_dependency, page: int=1, limit: int=10 ,current_user: dict = Depends(validate_token_user)):
     """Lấy danh sách tất cả các bản ghi đã thêm vào hệ thống."""
     if current_user["role"] != "Admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập vào tài nguyên này!!!")
-    list_logs = db.query(Log).order_by(Log.id).all()
+    # Lấy tổng số bản ghi
+    total_logs = db.query(Log).count()
+    print(total_logs)
+    list_logs = (
+        db.query(Log)
+        .order_by(Log.id.desc())
+        .offset((page - 1)* limit)
+        .limit(limit)
+        .all()
+    )
     list_log_reponse = [LogResponse.from_orm(log) for log in list_logs]
     return {
         "detail": "Tất cả các bản ghi đã được truy xuất thành công",
+        "total": total_logs,
+        "page": page,
+        "limit": limit,
         "logs": list_log_reponse
     }
 @router.get("/user/{user_id}/logs", status_code=status.HTTP_200_OK)
-async def get_user_logs(user_id: int, db: db_dependency, current_user: dict =Depends(validate_token_user)):
+async def get_user_logs(user_id: int, db: db_dependency, page: int=1, limit: int=10, current_user: dict =Depends(validate_token_user)):
     """Lấy danh sách tất cả các bản ghi đã thêm vào hệ thống của người dùng với ID truyền vào."""
     if current_user["role"] != "Admin" and current_user["user_id"] != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập vào tài nguyên này!!!")
-    if not db.query(Users).filter(Users.user_id == user_id).first():
+    if not db.query(Users).filter(Users.id == user_id).first():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại!!!")
-    list_logs = db.query(Log).filter(Log.user_id == user_id).order_by(Log.id).all()
+    # Lấy tổng số log của người dùng
+    total_logs_by_user = db.query(Log).filter(Log.user_id == user_id).count()
+    list_logs = (
+        db.query(Log)
+        .filter(Log.user_id == user_id)
+        .order_by(Log.id.desc())
+        .offset((page - 1)*limit)
+        .limit(limit)
+        .all()
+    )
     list_log_reponse = [LogResponse.from_orm(log) for log in list_logs]
     return {
         "detail": "Nhật ký người dùng đã được lấy thành công",
+        "total": total_logs_by_user,
+        "page": page,
+        "limit": limit,
         "logs": list_log_reponse
     }
 @router.post('/create-log', status_code=status.HTTP_201_CREATED)
