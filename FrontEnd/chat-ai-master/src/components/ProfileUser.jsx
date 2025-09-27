@@ -1,15 +1,15 @@
-// src/components/admin/ProfileModal.jsx
 import { useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import userProfileUser from "@/hooks/useProfileUser";
+import useProfileUser from "@/hooks/useProfileUser";
 import useAuthApi from "@/hooks/useAuthAPI";
 import PasswordInput from "./common/PasswordInput";
 import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
 
-export default function ProfileModal({ open, onClose, user }) {
-  const { getUpdateUser } = userProfileUser();
+function ProfileModalContent({ open, onClose, user }) {
+  const { getUpdateUser } = useProfileUser();
   const { changePassword, logout } = useAuthApi();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("info");
@@ -30,14 +30,10 @@ export default function ProfileModal({ open, onClose, user }) {
     confirmPassword: "",
   });
 
-
   const [loading, setLoading] = useState(false);
 
   const handleChangeProfile = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
-
-  const handleChangePassword = (e) =>
-    setPasswordData({ ...passwordData, [e.target.name]: e.target.value });
 
   const handleSaveProfile = async () => {
     try {
@@ -52,21 +48,25 @@ export default function ProfileModal({ open, onClose, user }) {
       setLoading(false);
     }
   };
+
   const handleChangePasswordSubmit = async () => {
-    if (passwordData.new_password !== passwordData.confirm_password) {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast.error("Mật khẩu mới và xác nhận không khớp!");
       return;
     }
     try {
       setLoading(true);
-      await changePassword(passwordData);
+      await changePassword({
+        oldPassword: passwordData.oldPassword,
+        newPassword: passwordData.newPassword,
+      });
       toast.success("Đổi mật khẩu thành công! Vui lòng đăng nhập lại.");
       await logout();
-      navigate("/login");
+      navigate("/ChatBot/login");
       setPasswordData({
-        old_password: "",
-        new_password: "",
-        confirm_password: "",
+        oldPassword: "",
+        newPassword: "",
+        confirmPassword: "",
       });
     } catch (err) {
       console.error(err);
@@ -80,7 +80,7 @@ export default function ProfileModal({ open, onClose, user }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fadeIn">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-lg relative overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-lg relative max-h-[90vh] overflow-y-auto">
         {/* Close button */}
         <button
           className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
@@ -217,4 +217,10 @@ export default function ProfileModal({ open, onClose, user }) {
       </div>
     </div>
   );
+}
+export default function ProfileModal(props){
+  return createPortal(
+    <ProfileModalContent {...props}/>,
+    document.body
+  )
 }

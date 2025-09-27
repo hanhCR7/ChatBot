@@ -26,9 +26,9 @@ export default function OTPForm({ userId }) {
       const role = decodedToken?.role
       toast.success("Đăng nhập thành công");
       if (role === "Admin") {
-        navigate("/admin/dashboard");
+        navigate("/ChatBot/admin/dashboard");
       } else {
-        navigate("/");
+        navigate("/ChatBot/");
       }
     } catch (err) {
       console.error("Lỗi validate OTP:", err);

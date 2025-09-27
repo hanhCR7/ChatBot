@@ -38,27 +38,40 @@ export default function Router() {
       {/* Cập nhật page title tự động */}
       <PageTitleHandler />
       <Routes>
-        <Route path="/" element={<PrivateRoute><ChatLayout /></PrivateRoute>}>
+        <Route
+          path="ChatBot/"
+          element={
+            <PrivateRoute>
+              <ChatLayout />
+            </PrivateRoute>
+          }
+        >
           <Route index element={<Welcome />} />
           <Route path="chat/:chatId" element={<ChatDetail />} />
           <Route path="images" element={<ImageDetail />} />
         </Route>
-        <Route path="/admin/*" element={<AdminLayout />}>
+        <Route path="ChatBot/admin/*" element={<AdminLayout />}>
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="roles" element={<RoleManagement />} />
           <Route path="permissions" element={<PermissionManagement />} />
-          <Route path="role-permissions"element={<RolePermissionManagement />}/>
+          <Route
+            path="role-permissions"
+            element={<RolePermissionManagement />}
+          />
           <Route path="user-roles" element={<UserRoleManagement />} />
           <Route path="banned-keywords" element={<BannedKeywordsTable />} />
           <Route path="violation-logs" element={<ViolationLogManagement />} />
-          <Route path="all-chat-users" element={<AdminAllChatUsers/>}/>
-          <Route path="chat-users/:user_id" element={<AdminChatUserDetail/>}/>
+          <Route path="all-chat-users" element={<AdminAllChatUsers />} />
+          <Route path="chat-users/:user_id" element={<AdminChatUserDetail />} />
         </Route>
-        <Route path="/login" element={<AuthPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/activate-account" element={<ActivateAccount />} />
+        <Route path="ChatBot/login" element={<AuthPage />} />
+        <Route
+          path="ChatBot/forgot-password"
+          element={<ForgotPasswordPage />}
+        />
+        <Route path="ChatBot/reset-password" element={<ResetPasswordPage />} />
+        <Route path="ChatBot/activate-account" element={<ActivateAccount />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

@@ -54,7 +54,7 @@ export default function SidebarChat({ open, onClose }) {
   const grouped = groupChatsByDate(filtered);
 
   useEffect(() => {
-    const currentId = location.pathname.split("/chat/")[1];
+    const currentId = location.pathname.split("/ChatBot/chat/")[1];
     if (currentId && chatRefs.current[currentId]) {
       chatRefs.current[currentId].scrollIntoView({
         behavior: "smooth",
@@ -79,7 +79,7 @@ export default function SidebarChat({ open, onClose }) {
   };
 
   const handleImageTab = () => {
-    navigate("/images");
+    navigate("/ChatBot/images");
     onClose?.();
   };
 
@@ -102,7 +102,7 @@ export default function SidebarChat({ open, onClose }) {
           {label}
         </p>
         {chats.map((chat) => {
-          const active = location.pathname === `/chat/${chat.id}`;
+          const active = location.pathname === `/ChatBot/chat/${chat.id}`;
           if (editing === chat.id) return null;
           return (
             <ChatItem
@@ -111,7 +111,7 @@ export default function SidebarChat({ open, onClose }) {
               chat={chat}
               active={active}
               onClick={() => {
-                navigate(`/chat/${chat.id}`);
+                navigate(`/ChatBot/chat/${chat.id}`);
                 onClose?.();
               }}
               onRename={() => {

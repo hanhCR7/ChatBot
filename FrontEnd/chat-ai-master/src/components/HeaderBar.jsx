@@ -54,7 +54,7 @@ export default function HeaderBar({ onToggleSidebar }) {
 
   const handleLogout = async () => {
     await logout();
-    navigate("/login");
+    navigate("/ChatBot/login");
   };
 
   return (
@@ -86,8 +86,7 @@ export default function HeaderBar({ onToggleSidebar }) {
             <Moon className="w-5 h-5 text-gray-600" />
           )}
         </button>
-        {/* Avatar */}
-        {/* Avatar */}
+        {/* Avatar + Dropdown */}
         <div className="relative" ref={menuRef}>
           <img
             src={
@@ -100,12 +99,13 @@ export default function HeaderBar({ onToggleSidebar }) {
             className="w-9 h-9 rounded-full cursor-pointer select-none border-2 border-gray-300 dark:border-gray-600 object-cover"
             onClick={() => setOpenMenu((prev) => !prev)}
           />
+
           {/* Dropdown menu */}
           {openMenu && (
             <div
               className="absolute right-0 mt-2 w-56 origin-top-right 
-                bg-white dark:bg-gray-800 rounded-lg shadow-lg 
-                py-1 text-sm text-gray-700 dark:text-gray-200 z-50"
+        bg-white dark:bg-gray-800 rounded-lg shadow-lg 
+        py-1 text-sm text-gray-700 dark:text-gray-200 z-50"
             >
               <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
                 <p className="font-semibold truncate">
@@ -132,14 +132,13 @@ export default function HeaderBar({ onToggleSidebar }) {
               </button>
             </div>
           )}
-
-          {/* Modal riêng biệt */}
-          <ProfileModal
-            open={openProfile}
-            onClose={() => setOpenProfile(false)}
-            user={user}
-          />
         </div>
+        {/* Modal render riêng biệt, không nằm trong avatar box */}
+        <ProfileModal
+          open={openProfile}
+          onClose={() => setOpenProfile(false)}
+          user={user}
+        />
       </div>
     </header>
   );

@@ -3,27 +3,27 @@ import { useSelector } from "react-redux";
 import { matchPath, useLocation } from "react-router-dom";
 
 const routeTitles = [
-  { path: "/", title: "JarVis AI" },
-  { path: "/login", title: "Đăng nhập" },
-  { path: "/activate-account", title: "Kích hoạt tài khoản" },
-  { path: "/forgot-password", title: "Quên mật khẩu" },
-  { path: "/reset-password", title: "Đặt lại mật khẩu" },
-  { path: "/chat/:chatId", title: "Chat" },
+  { path: "/ChatBot/", title: "JarVis AI" },
+  { path: "/ChatBot/login", title: "Đăng nhập" },
+  { path: "/ChatBot/activate-account", title: "Kích hoạt tài khoản" },
+  { path: "/ChatBot/forgot-password", title: "Quên mật khẩu" },
+  { path: "/ChatBot/reset-password", title: "Đặt lại mật khẩu" },
+  { path: "/ChatBot/chat/:chatId", title: "Chat" },
 
   // Image routes
-  { path: "/images", title: "Quản lý hình ảnh" },
+  { path: "/ChatBot/images", title: "Quản lý hình ảnh" },
 
   // Admin routes
-  { path: "/admin/dashboard", title: "Dashboard" },
-  { path: "/admin/users", title: "Quản lý người dùng" },
-  { path: "/admin/roles", title: "Quản lý vai trò" },
-  { path: "/admin/permissions", title: "Quản lý quyền" },
-  { path: "/admin/role-permissions", title: "Vai trò & quyền" },
-  { path: "/admin/user-roles", title: "Người dùng & vai trò" },
-  { path: "/admin/banned-keywords", title: "Từ khóa bị cấm" },
-  { path: "/admin/violation-logs", title: "Nhật ký vi phạm" },
-  { path: "/admin/all-chat-users", title: "All Chat Of All User" },
-  { path: "/admin/chat-users/:user_id", title: "All Message In Chat Of User" },
+  { path: "/ChatBot/admin/dashboard", title: "Dashboard" },
+  { path: "/ChatBot/admin/users", title: "Quản lý người dùng" },
+  { path: "/ChatBot/admin/roles", title: "Quản lý vai trò" },
+  { path: "/ChatBot/admin/permissions", title: "Quản lý quyền" },
+  { path: "/ChatBot/admin/role-permissions", title: "Vai trò & quyền" },
+  { path: "/ChatBot/admin/user-roles", title: "Người dùng & vai trò" },
+  { path: "/ChatBot/admin/banned-keywords", title: "Từ khóa bị cấm" },
+  { path: "/ChatBot/admin/violation-logs", title: "Nhật ký vi phạm" },
+  { path: "/ChatBot/admin/all-chat-users", title: "All Chat Of All User" },
+  { path: "/ChatBot/admin/chat-users/:user_id", title: "All Message In Chat Of User" },
 ];
 
 export default function usePageTitle() {
@@ -38,9 +38,9 @@ export default function usePageTitle() {
     let title = matchedRoute?.title || "Trang không tồn tại";
 
     // Nếu route là ChatDetail → lấy title từ Redux
-    if (matchedRoute?.path === "/chat/:chatId") {
+    if (matchedRoute?.path === "/ChatBot/chat/:chatId") {
       const match = matchPath(
-        { path: "/chat/:chatId", end: true },
+        { path: "/ChatBot/chat/:chatId", end: true },
         location.pathname
       );
       const chatId = match?.params?.chatId;
