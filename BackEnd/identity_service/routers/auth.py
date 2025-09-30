@@ -10,7 +10,7 @@ from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from typing import Optional
 from sqlalchemy.orm import Session
-from schemas import ResendOTP, SignUp, Login, ChangePassword, VerifyOTP, ResetPasswordRequest, ResetPasswordToken
+from schemas import ResendOTP, SignUp, Login, ChangePassword, ResetPasswordRequest, ResetPasswordToken, VerifyOTPLogin, VerifyOTPLogin
 from models import Role, UserRole, PasswordResetToken, OTPAttempts
 from databases import get_db
 from auth_per import get_current_user
@@ -44,9 +44,9 @@ def decode_token(token: str):
     try:
         return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token đã hết hạn")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token đã hết hạn")
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Token không hợp lệ")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token không hợp lệ")
 def verify_refresh_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -58,11 +58,11 @@ def verify_refresh_token(token: str):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token không hợp lệ.")
         return {"sub": user_id, "username": username, "role": role}
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Refresh token đã hết hạn.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token đã hết hạn.")
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Refresh token không hợp lệ.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token không hợp lệ.")
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Lỗi: {e}")
 
 @router.post("/login", status_code=status.HTTP_200_OK, dependencies=[Depends(rate_limiters(redis_clients, "login"))])
 async def login(login: Login):
@@ -72,44 +72,44 @@ async def login(login: Login):
     # Lấy địa chỉ IP của người dùng
     user_response = await get_user_with_password(login.username, login.password)
     if not user_response:
-        raise HTTPException(status_code=401, detail="Tài khoản hoặc mật khẩu không đúng.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tài khoản hoặc mật khẩu không đúng.")
     user_id = user_response.get('user_id')
     username = user_response.get('username')
     is_active = user_response.get("is_active")
     if not user_id:
-        raise HTTPException(status_code=500, detail="Lỗi xác thực!!")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Lỗi xác thực!!")
     if is_active != True:
         await send_user_lock_notification(user_response["email"], username)
-        raise HTTPException(status_code=401, detail="Tài khoản của bạn bị vô hiệu hóa hoặc bạn chưa kích hoạt tài khoản thông email đã gửi. Vui lòng liên hệ Admin để mở lại tài khoản.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tài khoản của bạn bị vô hiệu hóa hoặc bạn chưa kích hoạt tài khoản thông email đã gửi. Vui lòng liên hệ Admin để mở lại tài khoản.")
     user_data = get_cached_user(user_id)
     if not user_data:
         user_data = await get_user(user_id)
         cache_user(user_id, user_data)
     otp_required = await send_email_otp(user_response["user_id"], user_response["email"])
     if not otp_required or otp_required.get("status") != "success":
-        raise HTTPException(status_code=500, detail="Không thể gửi mã OTP. Vui lòng thử lại sau.")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Không thể gửi mã OTP. Vui lòng thử lại sau.")
     return{
         "otp_required": True,
         "user_id": user_response["user_id"],
         "message": "Mã OTP đã được gửi đến email của bạn. Vui lòng kiểm tra và nhập OTP để đăng nhập.",
     }
-@router.post("/validate-otp", status_code=status.HTTP_200_OK, dependencies=[Depends(rate_limiters(redis_clients, "validate_otp"))])
-async def verify_otp(request: VerifyOTP, db: Session = Depends(get_db)):
+@router.post("/validate-otp-login", status_code=status.HTTP_200_OK, dependencies=[Depends(rate_limiters(redis_clients, "validate_otp"))])
+async def verify_otp(request: VerifyOTPLogin, db: Session = Depends(get_db)):
     """Xác thực OTP"""
     redis_key = f"otp_attempts:{request.user_id}"
     attempts = int(redis_clients.get(redis_key) or 0)
     if attempts >= MAX_OTP_ATTEMPTS:
-        raise HTTPException(status_code=400, detail="Bạn nhập sai OTP quá nhiều lần. Hãy thử lại sau 5 phút!")
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Bạn nhập sai OTP quá nhiều lần. Hãy thử lại sau 5 phút!")
     otp_response = await validate_otp(request.user_id, request.otp)
     if not otp_response or otp_response.get("status") != "success":
         redis_clients.setex(redis_key, int(BLOCK_TIME.total_seconds()), attempts + 1)
-        raise HTTPException(status_code=400, detail="Mã OTP không hợp lệ hoặc hết hạn.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mã OTP không hợp lệ hoặc hết hạn.")
     redis_clients.delete(redis_key)
     user_response = await get_user(request.user_id)
     user_data = user_response.get("user")
     role = db.query(UserRole).filter(UserRole.user_id == request.user_id).first()
     if not user_data:
-        raise HTTPException(status_code=404, detail="Tài khoản không tồn tại.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tài khoản không tồn tại.")
     cache_user(request.user_id, user_data)
     access_token = create_access_token(data={"sub": str(request.user_id), "role": role.role.name, "username": user_data.get("username")})
     refresh_token = create_access_token(data={"sub": str(request.user_id), "role": role.role.name, "username": user_data.get("username")}, expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
@@ -137,18 +137,18 @@ async def sign_up(sign_up: SignUp, db: Session = Depends(get_db)):
         sign_up.first_name, sign_up.last_name, sign_up.username, sign_up.email, sign_up.password
     )
     if not user_response or "user" not in user_response or "id" not in user_response["user"]:
-        raise HTTPException(status_code=500, detail="Lỗi: Không lấy được user_id từ User Service")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Lỗi: Không lấy được user_id từ User Service")
     role = db.query(Role).filter(Role.name == "User").first()
     user_id = user_response["user"]["id"]
     db.add(UserRole(user_id=user_id, role_id=role.id))
     db.commit()
     activation_response = await generate_activation_token(user_id)
     if not activation_response or "activation_token" not in activation_response:
-        raise HTTPException(status_code=500, detail="Lỗi tạo token kích hoạt")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Lỗi tạo token kích hoạt")
     activation_token = activation_response["activation_token"]
     email_response = await active_account(sign_up.username,sign_up.email, activation_token)
     if not email_response or email_response.get("status") != "success":
-        raise HTTPException(status_code=500, detail="Lỗi kích hoạt tài khoản")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Lỗi kích hoạt tài khoản")
     await log_user_action(user_id, f"{sign_up.username} đã đăng ký thành công!")
     return {
         "message": "Người dùng đã đăng ký thành công! Email kích hoạt đã được gửi.", 
@@ -158,18 +158,39 @@ async def sign_up(sign_up: SignUp, db: Session = Depends(get_db)):
     }
 @router.put("/change-password", status_code=status.HTTP_200_OK, dependencies=[Depends(rate_limiters(redis_clients, "change_password"))])
 async def change_password(request: ChangePassword, current_user: dict = Depends(get_current_user)):
-    """Trang đổi mật khẩu"""
+    """
+    Trang đổi mật khẩu
+    Người dùng cần phải nhâp mật khẩu cũ và đợi nhận mã OTP gửi về mail để xác thực
+    """
     username = current_user["username"]
     user_response = await get_user_with_password(username, request.old_password)
     if not user_response:
-        raise HTTPException(status_code=404, detail="Người dùng không tồn tại!")
-    user_id = user_response["user_id"]
-    token = current_user["token"]
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại!")
+    otp_required = await send_email_otp(user_response["user_id"], user_response["email"])
+    if not otp_required or otp_required.get("status") != "success":
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Không thể gửi mã OTP. Vui lòng thử lại sau.")
+    return{
+        "otp_required": True,
+        "user_id": user_response["user_id"],
+        "message": "Mã OTP đã được gửi đến email của bạn. Vui lòng kiểm tra và nhập OTP để đăng nhập.",
+    }
+@router.post("/validate-otp-change-password", status_code=status.HTTP_200_OK, dependencies=[Depends(rate_limiters(redis_clients, "validate_otp"))])
+async def validate_otp_change_password(request: VerifyOTPLogin, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """Xác thực bằng mã OTP để thay dổi mật khẩu"""
+    redis_key = f"otp_attempts:{request.user_id}"
+    attempts = int(redis_clients.get(redis_key) or 0)
+    if attempts >= MAX_OTP_ATTEMPTS:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Bạn nhập sai OTP quá nhiều lần. Hãy thử lại sau 5 phút!")
+    otp_response = await validate_otp(request.user_id, request.otp)
+    if not otp_response or otp_response.get("status") != "success":
+        redis_clients.setex(redis_key, int(BLOCK_TIME.total_seconds()), attempts + 1)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mã OTP không hợp lệ hoặc hết hạn.")
+    redis_clients.delete(redis_key)
     try:
-        await update_password(user_id, request.old_password, request.new_password, token)
+        await update_password(current_user["user_id"], request.new_password, request.confirm_password)
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Lỗi cập nhật mật khẩu")
-    await log_user_action(user_id, f"{username} đã đổi mật khẩu thành công!")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Lỗi cập nhật mật khẩu")
+    await log_user_action(current_user["user_id"], f"{current_user['username']} đã đổi mật khẩu thành công!")
     return {
         "message": "Đổi mật khẩu thành công"
     }
@@ -178,7 +199,7 @@ async def logout(response: Response, token: str = Depends(oauth2_scheme), curren
     """Trang đăng xuất"""
     decoded_token = decode_token(token)  
     if not decoded_token:
-        raise HTTPException(status_code=400, detail="Token không hợp lệ hoặc đã hết hạn.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token không hợp lệ hoặc đã hết hạn.")
     expire_time = decoded_token.get("exp") - datetime.utcnow().timestamp()
     if expire_time > 0:
         redis_clients.setex(f"blacklist:{token}", int(expire_time), "blacklisted")

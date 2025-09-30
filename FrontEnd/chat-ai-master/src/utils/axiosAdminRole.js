@@ -38,7 +38,7 @@ axiosAdminRole.interceptors.response.use(
         return axiosAdminRole(originalRequest);
       } catch (refreshError) {
         localStorage.removeItem("access_token");
-        window.location.href = "/login";
+        window.location.href = "/ChatBot/login";
         return Promise.reject(refreshError);
       }
     }

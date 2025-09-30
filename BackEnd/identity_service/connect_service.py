@@ -37,10 +37,8 @@ async def get_user_with_password(username: str, password: str):
         except httpx.RequestError as e:
             raise HTTPException(status_code=500, detail=f"Lỗi khi nạp user: {repr(e)}")
 # Cập nhật password
-async def update_password(user_id: int, old_password: str, new_password_hash: str, token: str = Depends(oauth2_scheme)):
-    headers = {"Authentication": f"Bearer {token}"}
+async def update_password(user_id: int, new_password_hash: str):
     payload = {
-        "old_password": old_password,
         "new_password": new_password_hash,
         "confirm_password": new_password_hash
     }
@@ -48,7 +46,6 @@ async def update_password(user_id: int, old_password: str, new_password_hash: st
         try:
             response = await client.put(
                 f'{USER_SERVICE_URL}users/update-password/{user_id}', 
-                headers=headers, 
                 json=payload
             )
             if response.status_code == 200:
@@ -163,7 +160,6 @@ async def send_email_otp(user_id: int, email: str):
                 f'{EMAIL_SERVICE_URL}send-otp-email/',
                 json={"user_id": user_id, "email": email}
             )
-            print(f"[OTP Email] Status: {response.status_code}, Response: {response.text}")
             if response.status_code == 200:
                 return response.json()
             else:
@@ -172,7 +168,6 @@ async def send_email_otp(user_id: int, email: str):
                     detail=f"Gửi OTP thất bại. Phản hồi từ service: {response.text}"
                 )
         except httpx.RequestError as e:
-            print(f"Loi connect: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Lỗi khi gửi mail thông báo: {repr(e)}")
 
 # Validate OTP

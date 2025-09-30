@@ -10,15 +10,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from db_config import db_dependency
 from models import Users, UserStatus, Log
-from connect_service import validate_token_user, send_user_lock_notification
+from connect_service import validate_token_user, send_user_lock_notification, send_email_otp, validate_otp
 from routers.logs import create_log
 from verify_api_key import verify_api_key
 from security import hash_password, verify_password
 from user_schemas import (
-    CreateUserRequest, UpdateUserRequest, UserResponse, 
+    CreateUserRequest, AdminUpdateUserRequest, UpdateUserRequest, UserResponse, 
     UserStatus, UpdatePassword, AuthRequest, ListUserActive, 
     EditUserActive, ActivationTokenRequest, EmailResquest,
-    UpdatePasswordResquest
+    UpdatePasswordResquest, OTPRequest
 )
 router = APIRouter(prefix="/api/user_service",tags=["users"])
 load_dotenv()
@@ -83,9 +83,9 @@ async def create_user(create_user: CreateUserRequest, db: db_dependency,server_c
         "user": UserResponse.from_orm(create_user_model)
     }
 @router.put("/user/{user_id}", status_code=status.HTTP_200_OK)
-async def update_user(user_id: int, update_user: UpdateUserRequest, db: db_dependency, current_user: dict = Depends(validate_token_user)):
-    """Cập nhật thông tin của User theo ID. Chỉ có Admin hoặc User đang đăng nhập mới có thể cập nhật."""
-    if current_user["role"] != "Admin" and current_user["user_id"] != user_id:
+async def admin_update_user(user_id: int, update_user: AdminUpdateUserRequest, db: db_dependency, current_user: dict = Depends(validate_token_user)):
+    """Cập nhật thông tin của User theo ID. Chỉ có Admin mới có thể cập nhật."""
+    if current_user["role"] != "Admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập vào tài nguyên này!!!")
     user_ids = current_user["user_id"]
     user = db.query(Users).filter(Users.id == user_id).first()
@@ -107,6 +107,46 @@ async def update_user(user_id: int, update_user: UpdateUserRequest, db: db_depen
         "details": "Cập nhật người dùng thành công!",
         "user": UserResponse.from_orm(user)
     }
+@router.put("/user/update-info/{user_id}", status_code=status.HTTP_200_OK)
+async def update_user(user_id: int, update_user: UpdateUserRequest, db: db_dependency, current_user: dict = Depends(validate_token_user)):
+    """Cập nhật thông tin của User theo ID. Chỉ có User theo ID mới có thể cập nhật."""
+    if current_user["user_id"] != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập vào tài nguyên này!!!")
+    user_ids = current_user["user_id"]
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Người dùng không tồn tại!!!")
+    if db.query(Users).filter(Users.username == update_user.username, Users.id != user_id).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tên người dùng đã tồn tại!!!")
+    if db.query(Users).filter(Users.email == update_user.email, Users.id != user_id).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email người dùng đã tồn tại!!!")
+    await send_email_otp(user_id, update_user.email)
+    return {
+        "details": "Vui Lòng kiểm tra email để xác thực thay đổi thông tin cá nhân!"
+    }
+@router.post("/user/validate-otp/{user_id}", status_code=status.HTTP_200_OK)
+async def validate_otp_change_info(user_id: int, request: OTPRequest, db: db_dependency, current_user: dict = Depends(validate_token_user)):
+    """Xác thực mã OTP khi thay đổi thông tin cá nhân."""
+    if current_user["user_id"] != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập vào tài nguyên này!!!")
+    user_ids = current_user["user_id"]
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Người dùng không tồn tại!!!")
+    is_valid_otp = await validate_otp(user_id, update_user.otp)
+    if not is_valid_otp.get("is_valid"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mã OTP không hợp lệ hoặc đã hết hạn. Vui lòng thử lại!!!")
+    user.first_name = update_user.first_name
+    user.last_name = update_user.last_name
+    user.username = update_user.username
+    user.email = update_user.email
+    db.commit()
+    db.refresh(user)
+    await create_log(user_ids, f"Đã cập nhật thông tin cá nhân thành công.",db)
+    return {
+        "details": "Cập nhật thông tin cá nhân thành công!",
+        "user": UserResponse.from_orm(user)
+    }
 @router.put("/user/update-password/{user_id}")
 async def update_password(user_id: int, request: UpdatePassword, db: db_dependency, current_user: dict = Depends(validate_token_user)):
     """Cập nhật mật khẩu của User theo ID. Chỉ có Admin hoặc User đang đăng nhập mới có thể cập nhật."""
@@ -115,8 +155,6 @@ async def update_password(user_id: int, request: UpdatePassword, db: db_dependen
     user = db.query(Users).filter(Users.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Người dùng không tồn tại!!!")
-    if not verify_password(request.old_password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Mật khẩu hiện tại không đúng!!!")
     if request.new_password != request.confirm_new_password:
         raise HTTPException(status_code=400, detail="Mật khẩu mới và xác nhận mật khẩu mới phải giống nhau!!!")
     user.password_hash = hash_password(request.new_password)

@@ -10,7 +10,7 @@ export const useAuthApi = () => {
   };
 
   const validateOtp = async (user_id, otp) => {
-    const res = await axiosLogin.post("api/identity_service/validate-otp", {
+    const res = await axiosLogin.post("api/identity_service/validate-otp-login", {
       user_id,
       otp,
     });
@@ -41,17 +41,21 @@ export const useAuthApi = () => {
   };
   const changePassword = async ({
     oldPassword,
-    newPassword,
-    confirmPassword,
   }) => {
     const res = await axiosLogin.put("api/identity_service/change-password", {
       old_password: oldPassword,
-      new_password: newPassword,
-      confirm_password: confirmPassword,
     });
     return res.data;
   };
-
+  const validateOTPPassword = async ({user_id, otp, new_password, confirm_password}) => {
+    const res = await axiosLogin.post("api/identity_service/validate-otp-password",{
+      user_id: user_id,
+      otp: otp,
+      new_password: new_password,
+      confirm_password: confirm_password
+    });
+    return res.data;
+  }
   const resetPasswordRequest = async (email) => {
     const res = await axiosLogin.post(
       "/api/identity_service/reset-password-request",
@@ -82,6 +86,7 @@ export const useAuthApi = () => {
     resendOtp,
     signUp,
     changePassword,
+    validateOTPPassword,
     resetPasswordRequest,
     resetPassword,
     logout,

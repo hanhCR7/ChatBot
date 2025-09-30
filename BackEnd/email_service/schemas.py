@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr
+from typing import Literal
 
 class EmailRequest(BaseModel):
     recipient: EmailStr
@@ -16,6 +17,7 @@ class ActivationEmailRequest(BaseModel):
 class OTPRequest(BaseModel):
     user_id: int
     email: EmailStr
+    otp_type: Literal["login", "change_password"]
 class VerifyOTPRequest(BaseModel):
     user_id: int
     otp: str

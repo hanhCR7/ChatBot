@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
 
 function ProfileModalContent({ open, onClose, user }) {
   const { getUpdateUser } = useProfileUser();
-  const { changePassword, logout } = useAuthApi();
+  const { changePassword, validateOTPPassword, logout } = useAuthApi();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("info");
 
@@ -26,10 +26,13 @@ function ProfileModalContent({ open, onClose, user }) {
   // form change password
   const [passwordData, setPasswordData] = useState({
     oldPassword: "",
+  });
+  const [otpData, setOtpData] = useState({
+    otp: "",
     newPassword: "",
     confirmPassword: "",
   });
-
+  const [step, setStep] = useState(1); // Step 1: Enter old password, Step 2: Enter OTP and new password
   const [loading, setLoading] = useState(false);
 
   const handleChangeProfile = (e) =>
@@ -50,37 +53,50 @@ function ProfileModalContent({ open, onClose, user }) {
   };
 
   const handleChangePasswordSubmit = async () => {
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast.error("Mật khẩu mới và xác nhận không khớp!");
-      return;
-    }
     try {
       setLoading(true);
-      await changePassword({
-        oldPassword: passwordData.oldPassword,
-        newPassword: passwordData.newPassword,
-      });
-      toast.success("Đổi mật khẩu thành công! Vui lòng đăng nhập lại.");
-      await logout();
-      navigate("/ChatBot/login");
-      setPasswordData({
-        oldPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
+      await changePassword({ oldPassword: passwordData.oldPassword });
+      toast.success(
+        "Mã OTP đã được gửi về mail của bạn. Vui lòng khiểm tra mail để tiếp tục đổi mật khẩu."
+      );
+      setStep(2);
     } catch (err) {
       console.error(err);
-      toast.error("Đổi mật khẩu thất bại!");
+      toast.error(
+        "Mật khẩu cũ không đúng hoặc có lỗi xảy ra. Vui lòng thử lại."
+      );
     } finally {
       setLoading(false);
     }
   };
-
+  const handleValidateOtpPassword = async () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error("Mật khẩu mới và mật khẩu xác nhận không khớp!");
+      return;
+    }
+    try {
+      setLoading(true);
+      await validateOTPPassword({
+        user_id: user.id,
+        otp: otpData.otp,
+        new_password: passwordData.newPassword,
+        confirm_password: passwordData.confirmPassword,
+      });
+      toast.success("Đổi mật khẩu thành công!");
+      await logout();
+      navigate("/ChatBot/login");
+    } catch (err) {
+      console.error(err);
+      toast.error("Đổi mật khẩu thất bại! Vui lòng thử lại.");
+    } finally {
+      setLoading(false);
+    }
+  };
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fadeIn">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-lg relative max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-lg relative overflow-hidden">
         {/* Close button */}
         <button
           className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
@@ -186,31 +202,68 @@ function ProfileModalContent({ open, onClose, user }) {
 
           {activeTab === "password" && (
             <div className="space-y-4">
-              {[
-                { name: "oldPassword", placeholder: "Old Password" },
-                { name: "newPassword", placeholder: "New Password" },
-                { name: "confirmPassword", placeholder: "Confirm Password" },
-              ].map((field) => (
-                <PasswordInput
-                  key={field.name}
-                  id={field.name}
-                  value={passwordData[field.name]}
-                  onChange={(e) =>
-                    setPasswordData({
-                      ...passwordData,
-                      [field.name]: e.target.value,
-                    })
-                  }
-                  placeholder={field.placeholder}
-                />
-              ))}
-              <Button
-                onClick={handleChangePasswordSubmit}
-                disabled={loading}
-                className="w-full mt-2"
-              >
-                {loading ? "Changing..." : "Change Password"}
-              </Button>
+              {step === 1 && (
+                <>
+                  <PasswordInput
+                    id="oldPassword"
+                    value={passwordData.oldPassword}
+                    onChange={(e) =>
+                      setPasswordData({
+                        ...passwordData,
+                        oldPassword: e.target.value,
+                      })
+                    }
+                    placeholder="Old Password"
+                  />
+                  <Button
+                    onClick={handleChangePasswordSubmit}
+                    disabled={loading}
+                    className="w-full mt-2"
+                  >
+                    {loading ? "Sending OTP..." : "Send OTP"}
+                  </Button>
+                </>
+              )}
+
+              {step === 2 && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="OTP Code"
+                    value={otpData.otp}
+                    onChange={(e) =>
+                      setOtpData({ ...otpData, otp: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <PasswordInput
+                    id="newPassword"
+                    value={otpData.newPassword}
+                    onChange={(e) =>
+                      setOtpData({ ...otpData, newPassword: e.target.value })
+                    }
+                    placeholder="New Password"
+                  />
+                  <PasswordInput
+                    id="confirmPassword"
+                    value={otpData.confirmPassword}
+                    onChange={(e) =>
+                      setOtpData({
+                        ...otpData,
+                        confirmPassword: e.target.value,
+                      })
+                    }
+                    placeholder="Confirm Password"
+                  />
+                  <Button
+                    onClick={handleValidateOtpPassword}
+                    disabled={loading}
+                    className="w-full mt-2"
+                  >
+                    {loading ? "Verifying..." : "Confirm Change"}
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -218,9 +271,6 @@ function ProfileModalContent({ open, onClose, user }) {
     </div>
   );
 }
-export default function ProfileModal(props){
-  return createPortal(
-    <ProfileModalContent {...props}/>,
-    document.body
-  )
+export default function ProfileModal(props) {
+  return createPortal(<ProfileModalContent {...props} />, document.body);
 }

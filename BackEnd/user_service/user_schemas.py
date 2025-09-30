@@ -27,12 +27,19 @@ class CreateUserRequest(BaseModel):
             raise ValueError("Mật khẩu phải chứa ít nhất một chữ cái viết hoa")
         return value
 # user_schemas.py
-class UpdateUserRequest(BaseModel):
+class AdminUpdateUserRequest(BaseModel):
     first_name: str
     last_name: str
     username: str
     email: str
     status: UserStatus
+class UpdateUserRequest(BaseModel):
+    first_name: str
+    last_name: str
+    username: str
+    email: str
+class OTPRequest(UpdateUserRequest):
+    otp: str
 # Schema cho response user
 class UserResponse(BaseModel):
     id: int
@@ -51,7 +58,6 @@ class AuthRequest(BaseModel):
     username: str
     password: str 
 class UpdatePassword(BaseModel):
-    old_password: str
     new_password: str
     confirm_new_password: str
 class LogResponse(BaseModel):

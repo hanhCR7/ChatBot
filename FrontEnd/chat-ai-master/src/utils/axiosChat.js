@@ -1,5 +1,5 @@
-import axios from 'axios';
-import axiosLogin from './axiosLogin';
+import axios from "axios";
+import axiosLogin from "./axiosLogin";
 const instance = axios.create({
   baseURL: import.meta.env.VITE_API_CHAT_URL,
   withCredentials: true,
@@ -7,15 +7,18 @@ const instance = axios.create({
 console.log("Axios Base URL:", import.meta.env.VITE_API_CHAT_URL);
 
 // Gắn token từ localStorage vào header Authorization
-instance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+instance.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("access_token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-  return config;
-}, (error) => {
-  return Promise.reject(error);
-});
+);
 // Xử lý lỗi phản hồi từ server
 instance.interceptors.response.use(
   (response) => response,
@@ -35,7 +38,7 @@ instance.interceptors.response.use(
         return instance(originalRequest);
       } catch (refreshError) {
         localStorage.removeItem("access_token");
-        window.location.href = "/login";
+        window.location.href = "/ChatBot/login";
         return Promise.reject(refreshError);
       }
     }

@@ -13,12 +13,13 @@ const userProfileUser= () => {
     }
   };
   const getUpdateUser = async (id, payload) => {
-    const res = await axiosAdminUser.put(
+    const res = await axiosUser.put(
       `api/user_service/user/${id}`,
       payload
     );
     return res.data;
   };
+  
 
   return {
     getMe,

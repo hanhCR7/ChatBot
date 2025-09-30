@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from databases import get_db
 from schemas import OTPRequest, VerifyOTPRequest
 from service.otp_service import generate_otp, validate_otp
-from service.emali_templates import send_otp_email
+from service.emali_templates import send_otp_login_email, send_otp_change_pass_email
 from connect_service import get_user
 
 router = APIRouter(prefix="/api/email_service", tags=["emails"])
@@ -20,8 +20,10 @@ async def send_otp_email_endpoint(request: OTPRequest, db: Session = Depends(get
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại!")
         username = user_data["username"]
         otp = await generate_otp(db, request.user_id)
-        # Nếu frontend không gửi username, bạn có thể lấy từ DB
-        await send_otp_email(db, request.email, username, otp)
+        if request.otp_type == "login":
+            await send_otp_login_email(db, request.email, username, otp)
+        elif request.otp_type == "change_password":
+            await send_otp_change_pass_email(db, request.email, username, otp)
         return {"status": "success", "message": "Email OTP được gửi thành công"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Không gửi được email OTP: {str(e)}")

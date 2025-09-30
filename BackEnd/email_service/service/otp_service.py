@@ -11,7 +11,7 @@ OTP_EXPIRATION_TIME = int(os.getenv("OTP_EXPIRATION_TIME"))
 async def generate_otp(db: db_dependency, user_id: int):
     """Tạo và lưu mã OTP vào database."""
     # Tạo mã OTP ngẫu nhiên
-    otp_code = str(random.randint(100000, 999999))
+    otp_code = str(random.randint(0, 999999)).zfill(6)
     # Tạo thời gian hết hạn cho mã OTP
     expiration_time = datetime.now() + timedelta(seconds=OTP_EXPIRATION_TIME)
     db.query(OTPcode).filter(OTPcode.user_id == user_id).delete()

@@ -54,7 +54,7 @@ export default function HeaderAdmin({ onToggleSidebar }) {
 
   const handleLogout = async () => {
     await logout();
-    navigate("/login");
+    navigate("/ChatBot/login");
   };
 
   return (

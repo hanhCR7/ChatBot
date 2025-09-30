@@ -43,8 +43,38 @@ class AssignRoleRequest(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class SignUp(BaseModel):
+    first_name: str
+    last_name: str
+    username: str
+    email: EmailStr
+    password: str
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value):
+        if len(value) < 8:
+            raise ValueError("Mật khẩu phải có độ dài ít nhất 8 ký tự")
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', value):
+            raise ValueError("Mật khẩu phải chứa it nhất 1 ký tự đặc biệt")
+        if not re.search(r'[0-9]', value):
+            raise ValueError("Mật khẩu phải chứa ít nhất một số")
+        if not re.search(r'[A-Z]', value):
+            raise ValueError("Mật khẩu phải chứa ít nhất một chữ cái viết hoa")
+        return value
+    
+class Login(BaseModel):
+    username: str
+    password: str
+class VerifyOTPLogin(BaseModel):
+    user_id: int
+    otp: str
+
 class ChangePassword(BaseModel):
     old_password: str
+class VerifyOTPPassword(BaseModel):
+    user_id: int
+    otp: str
     new_password: str 
     confirm_password: str 
     @field_validator("new_password")
@@ -65,31 +95,6 @@ class ChangePassword(BaseModel):
         new_password = info.data.get("new_password")
         if new_password and value != new_password:
             raise ValueError("Mật khẩu xác nhận không khớp với mật khẩu mới!")
-        return value
-class Login(BaseModel):
-    username: str
-    password: str
-class SignUp(BaseModel):
-    first_name: str
-    last_name: str
-    username: str
-    email: EmailStr
-    password: str
-    @field_validator("password")
-    @classmethod
-    def validate_password(cls, value):
-        if len(value) < 8:
-            raise ValueError("Mật khẩu phải có độ dài ít nhất 8 ký tự")
-        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', value):
-            raise ValueError("Mật khẩu phải chứa it nhất 1 ký tự đặc biệt")
-        if not re.search(r'[0-9]', value):
-            raise ValueError("Mật khẩu phải chứa ít nhất một số")
-        if not re.search(r'[A-Z]', value):
-            raise ValueError("Mật khẩu phải chứa ít nhất một chữ cái viết hoa")
-        return value
-class VerifyOTP(BaseModel):
-    user_id: int
-    otp: str
 
 class ResendOTP(BaseModel):
     user_id: int
@@ -110,4 +115,11 @@ class ResetPasswordToken(BaseModel):
             raise ValueError("Mật khẩu phải chứa ít nhất một số")
         if not re.search(r'[A-Z]', value):
             raise ValueError("Mật khẩu phải chứa ít nhất một chữ cái viết hoa")
+        return value
+    @field_validator("confirm_password")
+    @classmethod
+    def passwords_match(cls, value: str, info: ValidationInfo) -> str:
+        new_password = info.data.get("new_password")
+        if new_password and value != new_password:
+            raise ValueError("Mật khẩu xác nhận không khớp với mật khẩu mới!")
         return value
