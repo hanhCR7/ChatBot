@@ -49,13 +49,13 @@ async def assign_admin_role_to_user(user_id: int):
             print("Gán quyền Admin thành công:", r.json())
 # Gửi mã otp khi thay dôi đổi thông tin nhạy cảm
 # Send Email OTP
-async def send_email_otp(user_id: int, email: str):
+async def send_email_otp(user_id: int, email: str, otp_type: str):
     timeout = httpx.Timeout(15.0, connect=5.0)  # 15 seconds for the request, 5 seconds for connection
     async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.post(
                 f'{EMAIL_URL}send-otp-email/',
-                json={"user_id": user_id, "email": email}
+                json={"user_id": user_id, "email": email, "otp_type": otp_type}
             )
             print(f"[OTP Email] Status: {response.status_code}, Response: {response.text}")
             if response.status_code == 200:

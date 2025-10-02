@@ -66,7 +66,7 @@ export default function SidebarChat({ open, onClose }) {
   const handleNew = async () => {
     const chat = await createChat("New Chat");
     await getChats();
-    navigate(`/chat/${chat.id}`);
+    navigate(`/ChatBot/chat/${chat.id}`);
     onClose?.();
     setTimeout(
       () =>

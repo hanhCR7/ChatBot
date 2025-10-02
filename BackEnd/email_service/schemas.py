@@ -17,7 +17,7 @@ class ActivationEmailRequest(BaseModel):
 class OTPRequest(BaseModel):
     user_id: int
     email: EmailStr
-    otp_type: Literal["login", "change_password"]
+    otp_type: Literal["login", "change_password", "update_user"]
 class VerifyOTPRequest(BaseModel):
     user_id: int
     otp: str

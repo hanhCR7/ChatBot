@@ -11,7 +11,7 @@ export default function WelcomeScreen({ onClose }) {
     try {
       const chat = await createChat("New Chat");
       await getChats();
-      navigate(`/chat/${chat.id}`);
+      navigate(`/ChatBot/chat/${chat.id}`);
       onClose?.();
     } catch (error) {
       console.error("Failed to create chat:", error);

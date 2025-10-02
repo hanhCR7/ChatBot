@@ -85,7 +85,7 @@ async def login(login: Login):
     if not user_data:
         user_data = await get_user(user_id)
         cache_user(user_id, user_data)
-    otp_required = await send_email_otp(user_response["user_id"], user_response["email"])
+    otp_required = await send_email_otp(user_response["user_id"], user_response["email"], otp_type="login")
     if not otp_required or otp_required.get("status") != "success":
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Không thể gửi mã OTP. Vui lòng thử lại sau.")
     return{
@@ -166,7 +166,7 @@ async def change_password(request: ChangePassword, current_user: dict = Depends(
     user_response = await get_user_with_password(username, request.old_password)
     if not user_response:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại!")
-    otp_required = await send_email_otp(user_response["user_id"], user_response["email"])
+    otp_required = await send_email_otp(user_response["user_id"], user_response["email"], otp_type="change_password")
     if not otp_required or otp_required.get("status") != "success":
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Không thể gửi mã OTP. Vui lòng thử lại sau.")
     return{

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from databases import get_db
 from schemas import OTPRequest, VerifyOTPRequest
 from service.otp_service import generate_otp, validate_otp
-from service.emali_templates import send_otp_login_email, send_otp_change_pass_email
+from service.emali_templates import send_otp_login_email, send_otp_change_pass_email, send_otp_update_user_email
 from connect_service import get_user
 
 router = APIRouter(prefix="/api/email_service", tags=["emails"])
@@ -24,6 +24,8 @@ async def send_otp_email_endpoint(request: OTPRequest, db: Session = Depends(get
             await send_otp_login_email(db, request.email, username, otp)
         elif request.otp_type == "change_password":
             await send_otp_change_pass_email(db, request.email, username, otp)
+        elif request.otp_type == "update_user":
+            await send_otp_update_user_email(db, request.email, username, otp)
         return {"status": "success", "message": "Email OTP được gửi thành công"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Không gửi được email OTP: {str(e)}")

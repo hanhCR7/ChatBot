@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from db_config import db_dependency
-from models import Users, UserStatus, Log
+from models import Users, UserStatus, Log, UserPendingUpdate
 from connect_service import validate_token_user, send_user_lock_notification, send_email_otp, validate_otp
 from routers.logs import create_log
 from verify_api_key import verify_api_key
@@ -112,7 +112,6 @@ async def update_user(user_id: int, update_user: UpdateUserRequest, db: db_depen
     """Cập nhật thông tin của User theo ID. Chỉ có User theo ID mới có thể cập nhật."""
     if current_user["user_id"] != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập vào tài nguyên này!!!")
-    user_ids = current_user["user_id"]
     user = db.query(Users).filter(Users.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Người dùng không tồn tại!!!")
@@ -120,7 +119,16 @@ async def update_user(user_id: int, update_user: UpdateUserRequest, db: db_depen
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tên người dùng đã tồn tại!!!")
     if db.query(Users).filter(Users.email == update_user.email, Users.id != user_id).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email người dùng đã tồn tại!!!")
-    await send_email_otp(user_id, update_user.email)
+    await send_email_otp(user_id, user.email, otp_type="update_user")
+    pending = UserPendingUpdate(
+        user_id = user_id,
+        first_name=update_user.first_name,
+        last_name=update_user.last_name,
+        username=update_user.username,
+        email=update_user.email,
+    )
+    db.merge(pending)
+    db.commit()
     return {
         "details": "Vui Lòng kiểm tra email để xác thực thay đổi thông tin cá nhân!"
     }
@@ -132,14 +140,20 @@ async def validate_otp_change_info(user_id: int, request: OTPRequest, db: db_dep
     user_ids = current_user["user_id"]
     user = db.query(Users).filter(Users.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Người dùng không tồn tại!!!")
-    is_valid_otp = await validate_otp(user_id, update_user.otp)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại!!!")
+    is_valid_otp = await validate_otp(user_id, request.otp)
     if not is_valid_otp.get("is_valid"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mã OTP không hợp lệ hoặc đã hết hạn. Vui lòng thử lại!!!")
-    user.first_name = update_user.first_name
-    user.last_name = update_user.last_name
-    user.username = update_user.username
-    user.email = update_user.email
+    # Lấy dữ liệu pending
+    pending = db.query(UserPendingUpdate).filter(UserPendingUpdate.user_id == user_id).first()
+    if not pending:
+        raise HTTPException(status_code=400, detail="Không tìm thấy thông tin cập nhật chờ xác thực")
+    # Apply thay đổi
+    user.first_name = pending.first_name
+    user.last_name = pending.last_name
+    user.username = pending.username
+    user.email = pending.email
+    db.delete(pending)
     db.commit()
     db.refresh(user)
     await create_log(user_ids, f"Đã cập nhật thông tin cá nhân thành công.",db)
@@ -154,9 +168,9 @@ async def update_password(user_id: int, request: UpdatePassword, db: db_dependen
         raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập vào tài nguyên này!!!")
     user = db.query(Users).filter(Users.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Người dùng không tồn tại!!!")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại!!!")
     if request.new_password != request.confirm_new_password:
-        raise HTTPException(status_code=400, detail="Mật khẩu mới và xác nhận mật khẩu mới phải giống nhau!!!")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mật khẩu mới và xác nhận mật khẩu mới phải giống nhau!!!")
     user.password_hash = hash_password(request.new_password)
     db.commit() 
     return {

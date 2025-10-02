@@ -1,8 +1,8 @@
-from datetime import datetime
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, func, Enum
 from sqlalchemy.orm import relationship
 from db_config import Base
 import enum
+
 # Enum cho trạng thái người dùng
 class UserStatus(enum.Enum):
     Active = "Active"
@@ -35,3 +35,17 @@ class Log(Base):
     timestamp = Column(DateTime,default=func.now(), server_default=func.now(), nullable=False)
     # Quan hệ ngược với User
     user = relationship("Users", back_populates="logs")
+
+# Model UserPendingUpdate(Lưu thay đổi nhạy cảm chờ OTP xác thực)
+class UserPendingUpdate(Base):
+    __tablename__ = 'user_pending_updates'
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    first_name = Column(String, nullable=True)
+    last_name =  Column(String, nullable=True)
+    username = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    # Quan hệ với Users (mỗi user chỉ có 1 pending update tại 1 thời điểm)
+    user = relationship("Users", backref="pending_update", uselist=False)

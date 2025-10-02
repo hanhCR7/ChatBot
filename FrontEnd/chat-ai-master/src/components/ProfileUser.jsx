@@ -9,12 +9,16 @@ import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 
 function ProfileModalContent({ open, onClose, user }) {
-  const { getUpdateUser } = useProfileUser();
+  const { getUpdateUser, validateOtpUpdate } = useProfileUser();
   const { changePassword, validateOTPPassword, logout } = useAuthApi();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("info");
-
-  // form edit profile
+  // NHập otp để thay đổi mật khẩu
+  const [step, setStep] = useState(1); // Step 1: Enter old password, Step 2: Enter OTP and new password
+  const [loading, setLoading] = useState(false);
+  // Nhập otp để thay đổi thông tin cá nhân
+  const [editStep, setEditStep] = useState(1); //step 1: edit form, step: enter otp
+  const [editOtp, setEditOtp] = useState(""); // form edit profile
   const [formData, setFormData] = useState({
     first_name: user?.first_name || "",
     last_name: user?.last_name || "",
@@ -32,8 +36,6 @@ function ProfileModalContent({ open, onClose, user }) {
     newPassword: "",
     confirmPassword: "",
   });
-  const [step, setStep] = useState(1); // Step 1: Enter old password, Step 2: Enter OTP and new password
-  const [loading, setLoading] = useState(false);
 
   const handleChangeProfile = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -42,8 +44,8 @@ function ProfileModalContent({ open, onClose, user }) {
     try {
       setLoading(true);
       await getUpdateUser(user.id, formData);
-      toast.success("Cập nhật hồ sơ thành công!");
-      onClose();
+      toast.success("OTP đã được gửi về mail của bạn! Vui lòng kiểm tra.");
+      setEditStep(2);
     } catch (err) {
       console.error(err);
       toast.error("Cập nhật thất bại!");
@@ -52,6 +54,20 @@ function ProfileModalContent({ open, onClose, user }) {
     }
   };
 
+  const handleValidateOtpUpdate = async () => {
+    try{
+      setLoading(true);
+      await validateOtpUpdate(user.id, editOtp);
+      toast.success("Cập nhật người dùng thành công!");
+      onClose();
+    } catch(err){
+      console.error(err);
+      toast.error("Xác thực OTP thất bại. Vui lòng thử lại!")
+    }
+    finally{
+      setLoading(false);
+    }
+  }
   const handleChangePasswordSubmit = async () => {
     try {
       setLoading(true);
@@ -70,7 +86,7 @@ function ProfileModalContent({ open, onClose, user }) {
     }
   };
   const handleValidateOtpPassword = async () => {
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
+    if (otpData.newPassword !== otpData.confirmPassword) {
       toast.error("Mật khẩu mới và mật khẩu xác nhận không khớp!");
       return;
     }
@@ -79,8 +95,8 @@ function ProfileModalContent({ open, onClose, user }) {
       await validateOTPPassword({
         user_id: user.id,
         otp: otpData.otp,
-        new_password: passwordData.newPassword,
-        confirm_password: passwordData.confirmPassword,
+        new_password: otpData.newPassword,
+        confirm_password: otpData.confirmPassword,
       });
       toast.success("Đổi mật khẩu thành công!");
       await logout();
@@ -169,34 +185,49 @@ function ProfileModalContent({ open, onClose, user }) {
 
           {activeTab === "edit" && (
             <div className="space-y-4">
-              {["first_name", "last_name", "username", "email"].map((field) => (
-                <input
-                  key={field}
-                  type={field === "email" ? "email" : "text"}
-                  name={field}
-                  value={formData[field]}
-                  onChange={handleChangeProfile}
-                  placeholder={field.replace("_", " ").toUpperCase()}
-                  className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              ))}
-              <select
-                name="status"
-                value={formData.status}
-                onChange={handleChangeProfile}
-                className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
+              {editStep === 1 && (
+                <>
+                  {["first_name", "last_name", "username", "email"].map(
+                    (field) => (
+                      <input
+                        key={field}
+                        type={field === "email" ? "email" : "text"}
+                        name={field}
+                        value={formData[field]}
+                        onChange={handleChangeProfile}
+                        placeholder={field.replace("_", " ").toUpperCase()}
+                        className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    )
+                  )}
+                  <Button
+                    onClick={handleSaveProfile}
+                    disabled={loading}
+                    className="w-full mt-2"
+                  >
+                    {loading ? "Saving..." : "Save Changes"}
+                  </Button>
+                </>
+              )}
 
-              <Button
-                onClick={handleSaveProfile}
-                disabled={loading}
-                className="w-full mt-2"
-              >
-                {loading ? "Saving..." : "Save Changes"}
-              </Button>
+              {editStep === 2 && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="Enter OTP"
+                    value={editOtp}
+                    onChange={(e) => setEditOtp(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <Button
+                    onClick={handleValidateOtpUpdate}
+                    disabled={loading}
+                    className="w-full mt-2"
+                  >
+                    {loading ? "Verifying..." : "Confirm Update"}
+                  </Button>
+                </>
+              )}
             </div>
           )}
 

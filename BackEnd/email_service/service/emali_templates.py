@@ -28,6 +28,10 @@ async def send_otp_change_pass_email(db: db_dependency, to: str, username: str, 
     body = load_templates("otp_password.html", username=username, otp_code=otp_code)
     return await send_email(db, to, "JarVis AI - Mã OTP đổi mật khẩu", body)
 
+async def send_otp_update_user_email(db: db_dependency, to: str, username: str, otp_code: str):
+    body = load_templates("otp_update_user.html", username=username, otp_code=otp_code)
+    return await send_email(db, to, "JarVis AI - Mã OTP thay đổi thông tin cá nhân", body)
+
 async def send_violation_lock_email(db: db_dependency, to: str, username: str, duration: str):
     body = load_templates("violation_lock.html", username=username, duration=duration)
     return await send_email(db, to, "JarVis AI - Tài khoản bị tạm khóa do vi phạm", body)

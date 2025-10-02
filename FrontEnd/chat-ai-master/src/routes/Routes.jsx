@@ -50,7 +50,7 @@ export default function Router() {
           <Route path="chat/:chatId" element={<ChatDetail />} />
           <Route path="images" element={<ImageDetail />} />
         </Route>
-        <Route path="ChatBot/admin/*" element={<AdminLayout />}>
+        <Route path="/ChatBot/admin/" element={<AdminLayout />}>
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="roles" element={<RoleManagement />} />
@@ -65,13 +65,13 @@ export default function Router() {
           <Route path="all-chat-users" element={<AdminAllChatUsers />} />
           <Route path="chat-users/:user_id" element={<AdminChatUserDetail />} />
         </Route>
-        <Route path="ChatBot/login" element={<AuthPage />} />
+        <Route path="/ChatBot/login" element={<AuthPage />} />
         <Route
-          path="ChatBot/forgot-password"
+          path="/ChatBot/forgot-password"
           element={<ForgotPasswordPage />}
         />
-        <Route path="ChatBot/reset-password" element={<ResetPasswordPage />} />
-        <Route path="ChatBot/activate-account" element={<ActivateAccount />} />
+        <Route path="/ChatBot/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/ChatBot/activate-account" element={<ActivateAccount />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
