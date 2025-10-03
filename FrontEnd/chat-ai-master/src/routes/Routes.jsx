@@ -21,6 +21,7 @@ import ActivateAccount from "@/components/ActivateAccount";
 import ImageDetail from "@/components/ImageDetail";
 import AdminAllChatUsers from "@/components/admin/AdminAllChatUsers";
 import AdminChatUserDetail from "@/components/admin/AdminChatUserDetail";
+import ImageManagement from "@/components/admin/ImageManagement";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 export default function Router() {
@@ -64,6 +65,7 @@ export default function Router() {
           <Route path="violation-logs" element={<ViolationLogManagement />} />
           <Route path="all-chat-users" element={<AdminAllChatUsers />} />
           <Route path="chat-users/:user_id" element={<AdminChatUserDetail />} />
+          <Route path="all-image-users" element={<ImageManagement/>} />
         </Route>
         <Route path="/ChatBot/login" element={<AuthPage />} />
         <Route

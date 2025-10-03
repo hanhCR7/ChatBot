@@ -14,20 +14,38 @@ import {
   HelpCircle,
   MinusSquare,
   WholeWord,
+  ImageIcon,
   icons,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
 const menu = [
-  { name: "Dashboard", path: "/admin/dashboard", icon: Home },
-  { name: "Users", path: "/admin/users", icon: Users },
-  { name: "Roles", path: "/admin/roles", icon: Shield },
-  { name: "Permissions", path: "/admin/permissions", icon: Key },
-  { name: "User Roles", path: "/admin/user-roles", icon: UserCheck },
-  { name: "Role Permissions", path: "/admin/role-permissions", icon: Link },
-  { name: "Banned Keywords", path: "/admin/banned-keywords", icon: WholeWord },
-  { name: "Violation Logs", path: "/admin/violation-logs", icon: MinusSquare },
-  { name: "All Chat", path: "/admin/all-chat-users", icon: ChartArea },
+  { name: "Dashboard", path: "/ChatBot/admin/dashboard", icon: Home },
+  { name: "Users", path: "/ChatBot/admin/users", icon: Users },
+  { name: "Roles", path: "/ChatBot/admin/roles", icon: Shield },
+  { name: "Permissions", path: "/ChatBot/admin/permissions", icon: Key },
+  { name: "User Roles", path: "/ChatBot/admin/user-roles", icon: UserCheck },
+  {
+    name: "Role Permissions",
+    path: "/ChatBot/admin/role-permissions",
+    icon: Link,
+  },
+  {
+    name: "Banned Keywords",
+    path: "/ChatBot/admin/banned-keywords",
+    icon: WholeWord,
+  },
+  {
+    name: "Violation Logs",
+    path: "/ChatBot/admin/violation-logs",
+    icon: MinusSquare,
+  },
+  { name: "All Chat", path: "/ChatBot/admin/all-chat-users", icon: ChartArea },
+  {
+    name: "All Tmage",
+    path: "/ChatBot/admin/all-image-users",
+    icon: ImageIcon,
+  },
 ];
 
 const SidebarAdmin = ({ collapsed, setCollapsed }) => {

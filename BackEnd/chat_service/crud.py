@@ -141,3 +141,9 @@ def delete_image(db, image_id: int, user_id: int) -> ImageOut:
 def get_all_images(db) -> List[ImageOut]:
     images = db.query(Image).order_by(Image.created_at.desc()).all()
     return [ImageOut.model_validate(img) for img in images]
+
+def get_image_by_id(db, image_id: int) -> ImageOut:
+    img = db.query(Image).filter(Image.id == image_id).first()
+    if not img:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy ảnh hoặc ảnh không tồn tại.")
+    return ImageOut.model_validate(img)
