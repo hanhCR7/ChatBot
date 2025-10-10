@@ -46,15 +46,19 @@ export default function ImageDetail() {
   }, [images, isNearBottom]);
 
   const handleGenerate = async () => {
-    if (!prompt.trim()) return;
+    const text = prompt.trim();
+    if (!text) {
+      toast.error("Vui lòng nhập prompt hợp lệ");
+      return;
+    }
     setLoading(true);
     try {
-      const newImg = await generateImage(prompt);
-      setImages([newImg, ...images]);
+      const newImg = await generateImage(text);
+      setImages((prev) => [newImg, ...prev]);
       setPrompt("");
       toast.success("Tạo ảnh thành công!");
-    } catch {
-      toast.error("Tạo ảnh thất bại");
+    } catch (error) {
+      toast.error(error.message || "Tạo ảnh thất bại");
     } finally {
       setLoading(false);
     }

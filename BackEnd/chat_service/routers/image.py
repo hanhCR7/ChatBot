@@ -1,7 +1,9 @@
 import os
 import uuid
 import httpx
-from openai import OpenAI
+import base64
+import logging
+from openai import OpenAI, OpenAIError
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy import func
 from pydantic import BaseModel
@@ -18,6 +20,7 @@ from models import Image
 # ==========================
 # Setup
 # ==========================
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chatbot_service/images", tags=["Images"])
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -54,41 +57,88 @@ async def generate_and_save_image(
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt không được để trống")
 
+    # --- 1. Kiểm duyệt trước (Moderation) ---
     try:
-        # 1. Gọi OpenAI để tạo ảnh
+        mod = client.moderations.create(model="omni-moderation-latest", input=prompt)
+        if mod.results[0].flagged:
+            raise HTTPException(
+                status_code=400,
+                detail="Prompt bị chặn bởi hệ thống kiểm duyệt. Vui lòng nhập mô tả khác."
+            )
+    except Exception as e:
+        logger.warning("Moderation check lỗi (bỏ qua): %s", e)
+
+    try:
+        # --- 2. Gọi OpenAI để tạo ảnh ---
         response = client.images.generate(
             model="gpt-image-1",
             prompt=prompt,
             size="1024x1024",
             n=1
         )
-        image_url = response.data[0].url
 
-        # 2. Tải ảnh
-        async with httpx.AsyncClient() as http_client:
-            res = await http_client.get(image_url)
-        res.raise_for_status()
+        # --- 3. Xử lý phản hồi ---
+        data = response.data[0]
+        image_url = getattr(data, "url", None)
+        image_b64 = getattr(data, "b64_json", None)
 
-        # 3. Lưu file
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        if not image_url and not image_b64:
+            raise HTTPException(
+                status_code=500,
+                detail="OpenAI không trả về dữ liệu ảnh hợp lệ (không có URL hoặc base64)."
+            )
+
+        # --- 4. Tải hoặc decode ảnh ---
+        if image_url:
+            async with httpx.AsyncClient(timeout=30) as http_client:
+                res = await http_client.get(image_url)
+                res.raise_for_status()
+                image_bytes = res.content
+        else:
+            image_bytes = base64.b64decode(image_b64)
+
+        # --- 5. Lưu file ---
         filename = f"{uuid.uuid4().hex}.png"
         filepath = os.path.join(UPLOAD_DIR, filename)
         with open(filepath, "wb") as f:
-            f.write(res.content)
+            f.write(image_bytes)
 
-        # 4. Tạo URL public
+        # --- 6. Tạo URL public ---
         base_url = str(request.base_url).rstrip("/")
         full_url = f"{base_url}/static/images/{filename}"
 
-        # 5. Lưu DB
+        # --- 7. Lưu vào DB ---
         img_data = ImageCreate(
             user_id=current_user["user_id"],
             url=full_url,
             description=prompt
         )
-        return create_image(db, img_data)
+
+        try:
+            saved = create_image(db, img_data)
+        except Exception as e:
+            os.remove(filepath)
+            raise HTTPException(status_code=500, detail=f"Lỗi lưu DB: {str(e)}")
+
+        logger.info("Tạo ảnh thành công cho user_id=%s: %s", current_user["user_id"], prompt)
+        return saved
+
+    except OpenAIError as oe:
+        err_str = str(oe)
+        logger.error("Lỗi OpenAI: %s", err_str)
+        if "moderation_blocked" in err_str or "safety_violations" in err_str:
+            raise HTTPException(
+                status_code=400,
+                detail="Prompt bị hệ thống an toàn OpenAI từ chối."
+            )
+        raise HTTPException(status_code=502, detail=f"Lỗi OpenAI: {err_str}")
+
+    except httpx.HTTPStatusError as hx_err:
+        logger.error("Lỗi tải ảnh: %s", hx_err)
+        raise HTTPException(status_code=502, detail="Không thể tải ảnh từ URL OpenAI.")
 
     except Exception as e:
+        logger.exception("Lỗi không xác định: %s", e)
         raise HTTPException(status_code=500, detail=f"Lỗi khi tạo ảnh: {str(e)}")
 
 

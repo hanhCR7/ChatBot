@@ -1,127 +1,149 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback, memo } from "react";
 import { useParams } from "react-router-dom";
-import { useChatDetail } from "@/hooks/chatBotAI/useChatDetail";
-import useBannedKeywordsApi from "@/hooks/chatBotAI/banedKeyWordsAPI";
+import { motion } from "framer-motion";
 import TextareaAutosize from "react-textarea-autosize";
-import { PaperPlaneIcon } from "@radix-ui/react-icons";
+import { PaperPlaneIcon, ReloadIcon } from "@radix-ui/react-icons";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
+import useBannedKeywordsApi from "@/hooks/chatBotAI/banedKeyWordsAPI";
+import useChatDetail from "@/hooks/chatBotAI/useChatDetail";
 
-export default function ChatDetail() {
+export default function ChatDetail({ darkMode }) {
   const { chatId } = useParams();
-  const { messages, isTyping, connected, sendMessage, sendTyping, violations } =
-    useChatDetail(chatId);
+  const {
+    messages,
+    sendMessage,
+    isTyping,
+    sendTyping,
+    connected,
+    partialResponse,
+    violations,
+  } = useChatDetail(chatId);
 
   const { getAllBannedKeywords } = useBannedKeywordsApi();
-  const [bannedKeywords, setBannedKeywords] = useState([]);
   const [input, setInput] = useState("");
+  const [bannedKeywords, setBannedKeywords] = useState([]);
   const [alerts, setAlerts] = useState([]);
 
-  const messageListRef = useRef(null);
-  const bottomRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const messageContainerRef = useRef(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const typingTimer = useRef(null);
 
-  // Load banned keywords
+  /* ---------- Scroll ---------- */
+  const handleScroll = () => {
+    if (!messageContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } =
+      messageContainerRef.current;
+    setIsNearBottom(scrollHeight - scrollTop - clientHeight < 80);
+  };
   useEffect(() => {
-    async function fetchBanned() {
-      try {
-        const keywords = await getAllBannedKeywords();
-        setBannedKeywords(keywords.map((k) => k.keyword.toLowerCase()));
-      } catch (err) {
-        console.error("Không thể tải danh sách từ khóa bị cấm:", err);
-      }
+    if (isNearBottom && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({
+        behavior: partialResponse ? "auto" : "smooth",
+      });
     }
-    fetchBanned();
+  }, [messages, partialResponse, isTyping, isNearBottom]);
+
+  /* ---------- Load banned keywords ---------- */
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await getAllBannedKeywords();
+        setBannedKeywords(data.map((k) => k.keyword.toLowerCase()));
+      } catch (err) {
+        console.error("Không thể tải từ khóa bị cấm:", err);
+      }
+    })();
   }, [getAllBannedKeywords]);
 
-  // Handle violations alerts
+  const containsBanned = useCallback(
+    (text) => bannedKeywords.some((k) => text.toLowerCase().includes(k)),
+    [bannedKeywords]
+  );
+
+  const pushAlert = useCallback(({ type = "local", message = "" }) => {
+    const id = `${type}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    setAlerts((prev) => [...prev, { id, type, message }]);
+  }, []);
+
+  /* ---------- Server violations ---------- */
   useEffect(() => {
-    if (violations.length > 0) {
-      const serverAlerts = violations.map((v) => ({
-        id: `server-${v.level}-${v.message}`,
-        type: "server",
-        level: v.level,
-        message: v.message,
-        ban_time: v.ban_time,
-      }));
-      setAlerts((prev) => {
-        const localAlerts = prev.filter((a) => a.type === "local");
-        const newServerAlerts = serverAlerts.filter(
-          (sa) => !prev.some((a) => a.id === sa.id)
-        );
-        return [...localAlerts, ...newServerAlerts];
-      });
-    } else {
-      setAlerts((prev) => prev.filter((a) => a.type === "local"));
-    }
+    if (!violations || violations.length === 0) return;
+    const newAlerts = violations.map((v) => ({
+      id: `server-${v.message}-${v.timestamp}`,
+      type: "server",
+      message: v.message,
+      level: v.level,
+      ban_time: v.ban_time,
+    }));
+    setAlerts((prev) => {
+      const unique = newAlerts.filter((a) => !prev.some((p) => p.id === a.id));
+      return [...prev, ...unique];
+    });
   }, [violations]);
 
-  // Track scroll to detect if user is near bottom
-  const handleScroll = () => {
-    if (!messageListRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = messageListRef.current;
-    setIsNearBottom(scrollHeight - scrollTop - clientHeight < 100);
-  };
-
-  // Auto scroll when new message or typing
-  useEffect(() => {
-    if (isNearBottom && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, isTyping, isNearBottom]);
+  /* ---------- Typing debounce ---------- */
+  const handleSendTypingDebounced = useCallback(() => {
+    clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => sendTyping?.(), 300);
+  }, [sendTyping]);
 
   const handleSend = () => {
-    if (!input.trim() || !connected) return;
+    if (!input.trim()) return;
     if (!connected) {
-      alert("Chưa kết nối tới máy chủ. Vui lòng thử lại.");
+      pushAlert({
+        type: "local",
+        message: "Chưa kết nối tới máy chủ. Tin nhắn chưa được gửi.",
+      });
       return;
     }
-    const loweredInput = input.toLowerCase();
-    const hasBanned = bannedKeywords.some((keyword) =>
-      loweredInput.includes(keyword)
-    );
-    if (hasBanned) {
-      const alertLocal = {
-        id: `local-${Date.now()}`,
+    if (containsBanned(input.trim())) {
+      pushAlert({
         type: "local",
-        message: "Tin nhắn chứa từ khóa cấm, đã gửi cho server để xử lý.",
-      };
-      setAlerts((prev) => {
-        const exists = prev.some(
-          (a) => a.type === "local" && a.message === alertLocal.message
-        );
-        return exists ? prev : [...prev, alertLocal];
+        message: "Tin nhắn chứa từ khóa bị cấm. Hệ thống sẽ kiểm tra.",
       });
     }
-
-    sendMessage(input);
+    sendMessage(input.trim());
     setInput("");
   };
 
-  const closeAlert = (id) => {
-    setAlerts((prev) => prev.filter((a) => a.id !== id));
-  };
+  useEffect(() => {
+    return () => clearTimeout(typingTimer.current);
+  }, []);
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Alerts */}
+    <div className="flex flex-col h-full bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-300">
+      {/* connection */}
+      {!connected && (
+        <div className="text-center text-xs text-gray-500 dark:text-gray-400 py-1">
+          <span className="inline-flex items-center gap-2">
+            <ReloadIcon className="w-4 h-4 animate-spin" /> Đang kết nối lại...
+          </span>
+        </div>
+      )}
+
+      {/* alerts */}
       {alerts.length > 0 && (
-        <div
-          className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative m-4"
-          role="alert"
-        >
-          {alerts.map(({ id, type, level, message, ban_time }) => (
-            <div key={id} className="mb-1 flex justify-between items-center">
-              <span>
-                {type === "server" && (
+        <div className="m-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 space-y-1 dark:bg-red-900 dark:border-red-700 dark:text-red-300">
+          {alerts.map((a) => (
+            <div key={a.id} className="flex justify-between items-center">
+              <span className="text-sm">
+                {a.type === "server" ? (
                   <>
-                    <strong>Vi phạm cấp độ {level}:</strong> {message}
-                    {ban_time > 0 &&
-                      ` (Cấm chat: ${Math.floor(ban_time / 60)} phút)`}
+                    <strong>Cảnh báo:</strong> {a.message}
+                    {a.ban_time > 0 &&
+                      ` (Cấm chat ${Math.floor(a.ban_time / 60)} phút)`}
                   </>
+                ) : (
+                  a.message
                 )}
-                {type === "local" && <>{message}</>}
               </span>
-              <button className="ml-4 underline" onClick={() => closeAlert(id)}>
+              <button
+                onClick={() =>
+                  setAlerts((prev) => prev.filter((p) => p.id !== a.id))
+                }
+                className="text-xs underline ml-2"
+              >
                 Đóng
               </button>
             </div>
@@ -129,60 +151,38 @@ export default function ChatDetail() {
         </div>
       )}
 
-      {/* Message list */}
+      {/* messages */}
       <div
-        ref={messageListRef}
+        ref={messageContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-6 space-y-6 bg-background"
+        className="flex-1 overflow-y-auto px-4 py-6 space-y-6 bg-gray-50 dark:bg-gray-900 transition-colors duration-300"
       >
-        {messages.map(({ id, text, isBot, timestamp, role }) => (
-          <div
-            key={id}
-            className={`flex ${isBot ? "justify-start" : "justify-end"}`}
-          >
-            {role === "system" ? (
-              <div className="text-center text-sm italic text-red-500">
-                {text}
-              </div>
-            ) : (
-              <div
-                className={`max-w-2xl rounded-xl px-5 py-4 shadow text-[15px] leading-relaxed transition-colors ${
-                  isBot
-                    ? "bg-muted text-foreground dark:bg-[#444654] dark:text-gray-100"
-                    : "bg-blue-500 text-white dark:bg-blue-600 dark:text-white"
-                }`}
-              >
-                <MarkdownRenderer content={text} />
-                {timestamp && (
-                  <div className="text-xs mt-2 text-right text-gray-400 dark:text-gray-300">
-                    {new Date(timestamp).toLocaleTimeString()}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+        {messages.map((msg) => (
+          <MemoMessageBubble key={msg.id} {...msg} />
         ))}
-
-        {isTyping && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <TypingBubble />
-            <span>Đang trả lời...</span>
-          </div>
+        {partialResponse && (
+          <MemoMessageBubble
+            key="__partial_response"
+            isBot
+            role="assistant"
+            text={partialResponse}
+            streaming
+          />
         )}
-
-        <div ref={bottomRef} />
+        {isTyping && <TypingBubble />}
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="border-t bg-card p-4">
+      {/* input */}
+      <div className="border-t border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 p-4 transition-colors duration-300">
         <div className="flex items-end gap-2">
           <TextareaAutosize
             minRows={1}
-            maxRows={5}
+            maxRows={6}
             value={input}
             onChange={(e) => {
               setInput(e.target.value);
-              sendTyping?.();
+              handleSendTypingDebounced();
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -190,15 +190,14 @@ export default function ChatDetail() {
                 handleSend();
               }
             }}
-            placeholder="Nhập tin nhắn..."
+            placeholder={connected ? "Nhập tin nhắn..." : "Đang kết nối..."}
+            className="flex-1 resize-none rounded-xl border px-4 py-2 text-sm focus:outline-none bg-gray-100 text-gray-900 border-gray-300 placeholder-gray-500 dark:bg-gray-700 dark:text-white dark:border-gray-600 dark:placeholder-gray-400 transition-colors duration-300"
             disabled={!connected}
-            className="flex-1 resize-none rounded-xl border bg-background px-4 py-2 text-sm text-foreground focus:outline-none dark:border-gray-600"
           />
           <button
             onClick={handleSend}
             disabled={!input.trim() || !connected}
-            className="p-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400"
-            aria-label="Gửi"
+            className="p-2 rounded-lg text-white transition bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-40"
           >
             <PaperPlaneIcon className="w-4 h-4" />
           </button>
@@ -208,16 +207,96 @@ export default function ChatDetail() {
   );
 }
 
+/* ---------- MessageBubble ---------- */
+const MessageBubble = ({ isBot, text, timestamp, role, streaming }) => {
+  if (role === "system")
+    return (
+      <div className="text-center text-sm italic text-red-500">{text}</div>
+    );
+
+  const botClasses =
+    "bg-gray-100 text-gray-900 border border-gray-300 dark:bg-[#444654] dark:text-[#ECECF1] dark:border-[#565869]";
+  const userClasses =
+    "bg-[#DCF8C6] text-gray-900 dark:bg-[#2E7D32] dark:text-white";
+
+  return (
+    <div
+      className={`flex ${
+        isBot ? "justify-start" : "justify-end"
+      } transition-all`}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+        className={`max-w-2xl rounded-xl px-5 py-4 shadow text-[15px] leading-relaxed ${
+          isBot ? botClasses : userClasses
+        }`}
+      >
+        <AnimatedText text={text} streaming={streaming} />
+        {timestamp && (
+          <div className="text-xs mt-2 text-right text-gray-500 dark:text-gray-400">
+            {new Date(timestamp).toLocaleTimeString()}
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+};
+const MemoMessageBubble = memo(MessageBubble);
+
+/* ---------- AnimatedText ---------- */
+function AnimatedText({ text = "", streaming = false }) {
+  const [displayed, setDisplayed] = useState(text);
+  const idxRef = useRef(text.length);
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    if (!streaming) {
+      setDisplayed(text);
+      idxRef.current = text.length;
+      return;
+    }
+    if (text.length <= idxRef.current) {
+      if (text.length < idxRef.current) {
+        setDisplayed(text);
+        idxRef.current = text.length;
+      }
+      return;
+    }
+
+    const append = () => {
+      setDisplayed((prev) => prev + text.charAt(idxRef.current));
+      idxRef.current++;
+      if (idxRef.current >= text.length) clearInterval(intervalRef.current);
+    };
+    clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(append, 12);
+    return () => clearInterval(intervalRef.current);
+  }, [text, streaming]);
+
+  return (
+    <MarkdownRenderer
+      content={displayed}
+      className="text-gray-900 dark:text-[#ECECF1]"
+    />
+  );
+}
+
+/* ---------- TypingBubble ---------- */
 function TypingBubble() {
   return (
-    <div className="flex space-x-1 pl-4">
-      {[...Array(3)].map((_, i) => (
-        <span
-          key={i}
-          className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce"
-          style={{ animationDelay: `${i * 0.2}s` }}
-        />
-      ))}
+    <div className="flex items-center gap-2 text-sm text-muted-foreground pl-4">
+      <div className="flex space-x-1 mr-2">
+        {[...Array(3)].map((_, i) => (
+          <span
+            key={i}
+            className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce"
+            style={{ animationDelay: `${i * 0.18}s` }}
+          />
+        ))}
+      </div>
+      <span>Đang trả lời...</span>
     </div>
   );
 }

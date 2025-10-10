@@ -6,11 +6,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+MODEL_RESPONSE = os.getenv("MODEL_AI")
+MODEL_TITLE = os.getenv("MODEL_TITLE")
 
 # Gọi OpenAI API để lấy phản hồi từ mô hình (stream)
 async def generate_response(chatlog):
     return await client.chat.completions.create(
-        model="gpt-4o",
+        model=MODEL_RESPONSE,
         messages=chatlog,
         temperature=0.7,
         max_tokens=1500,
@@ -26,7 +28,9 @@ async def generate_title(messages: list[str]) -> str:
     if not messages:
         return "Cuộc trò chuyện mới"
 
-    content = "\n".join(messages[:3]).strip()  # lấy 2-3 tin nhắn đầu
+    content = "\n".join(
+        [m.get("content", "") if isinstance(m, dict) else str(m) for m in messages[:3]]
+    ).strip()
 
     try:
         lang = detect(content)
@@ -60,7 +64,7 @@ async def generate_title(messages: list[str]) -> str:
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o",
+            model=MODEL_TITLE,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=16,
@@ -72,9 +76,9 @@ async def generate_title(messages: list[str]) -> str:
         raw_title = re.sub(r'^(Tiêu đề[:：]\s*|Title[:：]\s*)', '', raw_title, flags=re.IGNORECASE)
         clean_title = re.sub(r'[\"“”‘’\'.:;!?()\n]', '', raw_title).strip()
 
-        # Giữ max 6 từ
+        # Giữ max 5 từ
         words = clean_title.split()
-        if len(words) > 6:
+        if len(words) > 5:
             clean_title = " ".join(words[:6])
 
         return clean_title if clean_title else default_title

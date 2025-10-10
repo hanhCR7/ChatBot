@@ -17,9 +17,12 @@ export default function HeaderBar({ onToggleSidebar }) {
   const { getMe } = useProfileUser();
   const [user, setUser] = useState(null);
   const [openProfile, setOpenProfile] = useState(false);
-  const [darkMode, setDarkMode] = useState(
-    document.documentElement.classList.contains("dark")
-  );
+  // Khởi tạo dark mode theo localStorage or theo system
+  const [darkMode, setDarkMode] = useState( () => {
+    const saved = localStorage.getItem("user_dark_mode");
+    if (saved !== null) return saved === "true";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
   const [openMenu, setOpenMenu] = useState(false);
   const menuRef = useRef(null);
   const { logout } = useAuthApi();
@@ -35,11 +38,15 @@ export default function HeaderBar({ onToggleSidebar }) {
       }
     })();
   }, []);
-
+  // khi darkmode thay đổi, cập nhật class và save
   useEffect(() => {
     const root = document.documentElement;
-    darkMode ? root.classList.add("dark") : root.classList.remove("dark");
-    localStorage.setItem("user_dark_mode", darkMode);
+    if (darkMode){
+      root.classList.add("dark")
+    } else{
+      root.classList.remove("dark")
+    }
+    localStorage.setItem("user_dark_mode", darkMode)
   }, [darkMode]);
 
   useEffect(() => {

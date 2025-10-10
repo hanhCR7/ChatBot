@@ -1,32 +1,32 @@
 import contextlib
-import traceback
 import uuid
 import asyncio
 import openai
 import os
+import logging
 import datetime
 from sqlalchemy import func
 from crud import *
-from typing import List
+from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 from jose import JWTError
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session, joinedload
 from service.redis_client import redis_client
 from db_config import SessionLocal, db_dependency
-from schemas import ChatSessionUpdate, ChatSessionOut, AddMessage, ChatHistoryOut, AllChatUsersResponse, UserDetailOut, SessionWithMessageOut
+from schemas import ChatSessionUpdate, ChatSessionOut, ChatHistoryOut, AllChatUsersResponse, UserDetailOut, SessionWithMessageOut
 from starlette.websockets import WebSocketState
-from service.violation_handler import contains_violation, process_violation
 from models import ChatSession, ChatHistory
 from connect_service import get_current_user, validate_token_from_query, get_user
-from routers.openai_utils import generate_response, generate_title
 from sockets.connection_manager import ConnectionManager
+from sockets.ws_helpers import handle_send_message, handle_typing, now_vn
 router = APIRouter(prefix="/api/chatbot_service",tags=["chatbot"])
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 VN_TIMEZONE = datetime.timezone(datetime.timedelta(hours=7))
 timestamp = datetime.datetime.now(VN_TIMEZONE)
 manager = ConnectionManager()
+logger = logging.getLogger("chatbot.websocket")
 #ADMIN
 @router.get("/all-chat-users", response_model=AllChatUsersResponse)
 async def get_all_chat_with_users(db: db_dependency, page: int=1, limit:int=10, user=Depends(get_current_user)):
@@ -206,154 +206,100 @@ async def delete_one_message(message_id: uuid.UUID, db: db_dependency, user=Depe
 # --------------------- WebSocket ---------------------
 @router.websocket("/ws/{chat_id}")
 async def websocket_endpoint(websocket: WebSocket, chat_id: uuid.UUID):
-    db: Session = SessionLocal()  # tạo session mới cho mỗi kết nối websocket
+    db: Session = SessionLocal()
+    user_id: Optional[int] = None
     try:
-        user_data = await validate_token_from_query(websocket)
-        if not user_data:
+        # 1. Auth
+        try:
+            user_data = await validate_token_from_query(websocket)
+            if not user_data:
+                await websocket.close(code=1008)
+                return
+            user_id = int(user_data.get("user_id") or user_data.get("sub"))
+        except JWTError:
+            logger.warning("Xác thực JWT cho WebSocket thất bại")
             await websocket.close(code=1008)
             return
-    except JWTError:
-        await websocket.close(code=1008)
-        return
-    user_id = user_data.get("user_id") or user_data.get("sub")
-    chat_session = db.query(ChatSession).filter(
-        ChatSession.id == chat_id,
-        ChatSession.user_id == int(user_id)
-    ).first()
-    if not chat_session:
-        await websocket.close(code=1008)
-        return
-    await websocket.accept()
-    await manager.connect(websocket, chat_id, user_id)
-    chat_log = [{"role": "system", "content": "You are a helpful assistant that replies clearly and concisely."}]
-    messages = db.query(ChatHistory).filter(ChatHistory.chat_id == chat_id).order_by(ChatHistory.created_at).all()
-    for m in messages:
-        chat_log.append({"role": m.role, "content": m.content})
-    try:
-        while True:
-            if websocket.client_state != WebSocketState.CONNECTED:
-                break
+
+        # 2. Kiểm tra quyền sở hữu phiên trò chuyện (chat_session)
+        chat_session = db.query(ChatSession).filter(
+            ChatSession.id == chat_id,
+            ChatSession.user_id == user_id,
+        ).first()
+        if not chat_session:
+            logger.warning(f"Truy cập WebSocket không được phép: user {user_id} -> chat {chat_id}")
+            await websocket.close(code=1008)
+            return
+
+        # 3. Chấp nhận và kết nối
+        await websocket.accept()
+        await manager.connect(websocket, chat_id, user_id)
+        logger.info(f"User {user_id} connected to chat {chat_id}")
+
+        # 4. Tải lịch sử trò chuyện giới hạn (chỉ lấy N tin nhắn gần nhất để tiết kiệm token)
+        N_CONTEXT = 40
+        chat_log: List[Dict[str, Any]] = [{"role": "system", "content": "Bạn là một trợ lý hữu ích, phản hồi rõ ràng và súc tích."}]
+        messages = (
+            db.query(ChatHistory)
+            .filter(ChatHistory.chat_id == chat_id)
+            .order_by(ChatHistory.created_at.desc())
+            .limit(N_CONTEXT)
+            .all()
+        )
+        for m in reversed(messages):
+            chat_log.append({"role": m.role, "content": m.content})
+
+        # 5. Vòng lặp chính
+        while websocket.client_state == WebSocketState.CONNECTED:
             try:
                 data = await websocket.receive_json()
             except WebSocketDisconnect:
+                logger.info(f"WebSocket bị ngắt kết nối bởi client: user {user_id}, chat {chat_id}")
                 break
-            except Exception:
-                break
+            except Exception as e:
+                # Không đóng socket vì một JSON không hợp lệ; tiếp tục lắng nghe
+                logger.exception("Lỗi khi nhận dữ liệu JSON từ WebSocket: %s", e)
+                continue
+
             action = data.get("action")
             content = data.get("content")
+
             if action == "typing":
-                await manager.broadcast(
-                    chat_id,
-                    {
-                        "event": "TYPING",
-                        "user_id": user_id
-                    },
-                    skip_user_id=user_id  # không gửi lại cho chính người đang gõ
-                )
+                await handle_typing(manager, chat_id, user_id)
                 continue
+
             if action != "sendMessage" or not content:
+                # Bỏ qua các hành động không xác định
                 continue
-            user_input = content
-            timestamp = datetime.datetime.now(VN_TIMEZONE)
-            # Check ban
-            ban_key = f"chat_ban:{user_id}"
-            if await redis_client.exists(ban_key):
-                await websocket.send_json({
-                    "role": "system",
-                    "content": "Bạn đang bị cấm chat tạm thời do vi phạm nội dung.",
-                    "timestamp": timestamp.isoformat()
-                })
-                continue
-            # Check violation
-            if await contains_violation(user_input):
-                await process_violation(websocket, user_input, db, user_data)
-                continue
-            # Save user message
-            add_message_to_chat(db, AddMessage(
+
+            # Giao toàn bộ quy trình gửi tin nhắn cho hàm hỗ trợ (helper)
+            await handle_send_message(
+                websocket=websocket,
+                db=db,
                 chat_id=chat_id,
-                role="user",
-                content=user_input,
-                timestamp=timestamp
-            ))
-            db.commit()  # commit ngay sau khi thêm tin nhắn
-            await websocket.send_json({
-                "role": "user",
-                "content": user_input,
-                "violations": [],
-                "timestamp": timestamp.isoformat()
-            })
-            await manager.broadcast(
-                chat_id, {
-                    "role": "user",
-                    "content": user_input,
-                    "timestamp": timestamp.isoformat()
-                },
-                skip_user_id=user_id
+                chat_log=chat_log,
+                chat_session=chat_session,
+                user_id=user_id,
+                user_input=content,
+                user_data=user_data,
             )
-            chat_log.append({"role": "user", "content": user_input})
-            # Generate AI response
-            stream = await generate_response(chat_log)
-            assistant_reply = ""
-            buffer = ""
-            reply_timestamp = datetime.datetime.now(VN_TIMEZONE)
-            last_send_time = datetime.datetime.now(VN_TIMEZONE)
-            async for chunk in stream:
-                delta = chunk.choices[0].delta
-                if not delta.content:
-                    continue
-                text = delta.content
-                assistant_reply += text
-                buffer += text
-                now = datetime.datetime.now(VN_TIMEZONE)
-                if any(buffer.endswith(punct) for punct in [".", "!", "?", "…", "。", "！", "？"]) \
-                or len(buffer) >= 10 \
-                or (now - last_send_time).total_seconds() > 1.0:
-                    await websocket.send_json({
-                        "role": "assistant",
-                        "content": buffer,
-                        "timestamp": now.isoformat()
-                    })
-                    buffer = ""
-                    last_send_time = now
-            if buffer.strip():
-                await websocket.send_json({
-                    "role": "assistant",
-                    "content": buffer,
-                    "timestamp": datetime.datetime.now(VN_TIMEZONE).isoformat()
-                })
-            await websocket.send_json({
-                "event": "DONE",
-                "timestamp": datetime.datetime.now(VN_TIMEZONE).isoformat()
-            })
-            # Save assistant message
-            add_message_to_chat(db, AddMessage(
-                chat_id=chat_id,
-                role="assistant",
-                content=assistant_reply,
-                timestamp=reply_timestamp
-            ))
-            db.commit()
-            chat_log.append({"role": "assistant", "content": assistant_reply})
-            # Update title nếu cần
-            if chat_session.title in ["New Chat", "Cuộc trò chuyện mới"]:
-                new_title = await generate_title([user_input, assistant_reply])
-                update_chat_session(db, chat_id, ChatSessionUpdate(title=new_title))
-                db.commit()
-                await websocket.send_json({
-                    "role": "system",
-                    "event": "TITLE_UPDATED",
-                    "title": new_title
-                })
+
     except Exception as e:
-        if websocket.client_state == WebSocketState.CONNECTED:
-            await websocket.send_json({
-                "role": "system",
-                "content": "An error occurred. Please try again.",
-                "timestamp": datetime.datetime.now(VN_TIMEZONE).isoformat()
-            })
-    finally:
+        logger.exception("Fatal websocket error: %s", e)
         if websocket.client_state == WebSocketState.CONNECTED:
             with contextlib.suppress(Exception):
+                await websocket.send_json({
+                    "role": "system",
+                    "content": "Đã xảy ra lỗi. Vui lòng thử lại.",
+                    "timestamp": now_vn().isoformat(),
+                })
+    finally:
+        with contextlib.suppress(Exception):
+            if websocket.client_state == WebSocketState.CONNECTED:
                 await websocket.close()
-        await manager.disconnect(websocket, chat_id, user_id)
+        # đảm bảo disconnect khỏi manager
+        with contextlib.suppress(Exception):
+            if user_id is not None:
+                await manager.disconnect(websocket, chat_id, user_id)
         db.close()
+        logger.info(f"Đã đóng kết nối WebSocket cho người dùng {user_id} chat {chat_id}")
