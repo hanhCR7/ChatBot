@@ -1,10 +1,11 @@
+import { useCallback } from "react";
 import axiosAdminUser from "@/utils/axiosAdminUser";
 
 const useAdminUserApi = () => {
-    const getAllUser = async () => {
+    const getAllUser = useCallback(async () => {
         const res = await axiosAdminUser.get("api/user_service/all-users");
         return Array.isArray(res.data.users) ? res.data.users : [];
-    }
+    }, []);
     const createUser = async (first_name, last_name, username, email, password) => {
         const res = await axiosAdminUser.post("api/user_service/create-user", { first_name, last_name, username, email, password });
         return res.data;

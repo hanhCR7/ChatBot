@@ -49,13 +49,13 @@ class ChatHistoryOut(BaseModel):
     chat_session: ChatSessionOut
     messages: List[MessageOut]
 
-class BanedKeywordOut(BaseModel):
+class BannedKeywordOut(BaseModel):
     id: int
     keyword: str
     model_config = {
         "from_attributes": True
     }
-class BanedKeywordCreate(BaseModel):
+class BannedKeywordCreate(BaseModel):
     keyword: str
 
 class ViolationLogCreate(BaseModel):
@@ -144,3 +144,4 @@ class UserDetailOut(BaseModel):
     model_config = {
         "from_attributes": True
     }
+

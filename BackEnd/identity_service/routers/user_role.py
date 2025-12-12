@@ -39,9 +39,27 @@ async def read_user_roles(user_id: int, db: db_dependency, current_user: dict = 
 
     try:
         user_response = await get_user(user_id)
-        user = user_response.get("user")
-        if not user:
+        if not user_response:
             raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
+        
+        # Xử lý cả trường hợp response là dict trực tiếp hoặc có key "user"
+        if isinstance(user_response, dict):
+            if "user" in user_response:
+                user = user_response["user"]
+            else:
+                user = user_response
+        else:
+            if hasattr(user_response, 'model_dump'):
+                user = user_response.model_dump()
+            elif hasattr(user_response, 'dict'):
+                user = user_response.dict()
+            else:
+                raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
+        
+        if not user or not isinstance(user, dict):
+            raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=502, detail="Không thể truy xuất người dùng từ User Service")
 
@@ -68,9 +86,28 @@ async def assign_role_to_user(user_id: int, user_role_request: UserRoleRequest, 
         raise HTTPException(status_code=404, detail=f"Vai trò '{user_role_request.role_name}' không tồn tại")
 
     try:
-        user = await get_user(user_id).get("user")
-        if not user:
+        user_response = await get_user(user_id)
+        if not user_response:
             raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+        
+        # Xử lý cả trường hợp response là dict trực tiếp hoặc có key "user"
+        if isinstance(user_response, dict):
+            if "user" in user_response:
+                user = user_response["user"]
+            else:
+                user = user_response
+        else:
+            if hasattr(user_response, 'model_dump'):
+                user = user_response.model_dump()
+            elif hasattr(user_response, 'dict'):
+                user = user_response.dict()
+            else:
+                raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+        
+        if not user or not isinstance(user, dict):
+            raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=502, detail="Không thể truy xuất người dùng từ User Service")
 

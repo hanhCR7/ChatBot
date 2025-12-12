@@ -13,7 +13,7 @@ from crud import (
     create_image, get_images_by_user, update_image_description,
     delete_image, get_all_images, get_image_by_id
 )
-from schemas import ImageCreate, ImageOut, UpdateImageDescription
+from schemas import ImageCreate, ImageOut, UpdateImageDescription 
 from db_config import db_dependency
 from models import Image
 
@@ -39,7 +39,7 @@ class GenerateRequest(BaseModel):
 # ==========================
 def require_admin(user=Depends(get_current_user)):
     if user["role"] != "Admin":
-        raise HTTPException(status_code=403, detail="Bạn không có quyền")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cạp vào chức năng này!")
     return user
 
 

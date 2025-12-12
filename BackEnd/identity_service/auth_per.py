@@ -47,14 +47,38 @@ async def get_current_user(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Lỗi khi gọi User Service: {str(e)}"
         )
-    if not user_response or "user" not in user_response:
+    
+    # Xử lý cả trường hợp response là dict trực tiếp hoặc có key "user"
+    if not user_response:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Người dùng không tồn tại"
         )
-    user_data = user_response["user"]
+    
+    if isinstance(user_response, dict):
+        if "user" in user_response:
+            user_data = user_response["user"]
+        else:
+            user_data = user_response
+    else:
+        if hasattr(user_response, 'model_dump'):
+            user_data = user_response.model_dump()
+        elif hasattr(user_response, 'dict'):
+            user_data = user_response.dict()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Định dạng dữ liệu user không hợp lệ"
+            )
+    
+    if not isinstance(user_data, dict):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Định dạng dữ liệu user không hợp lệ"
+        )
+    
     return {
-        "user_id": user_data.get("id"),
+        "user_id": user_data.get("id") or user_data.get("user_id"),
         "username": user_data.get("username"),
         "role": role,
         "token": token

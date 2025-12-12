@@ -1,6 +1,7 @@
 from datetime import datetime
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, EmailStr
 import re
+from typing import Literal
 class RoleRequest(BaseModel):
     name: str
     description: str = Field(max_length=255)
@@ -98,6 +99,7 @@ class VerifyOTPPassword(BaseModel):
 
 class ResendOTP(BaseModel):
     user_id: int
+    otp_type: Literal["login", "change_password", "update_user"]
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
 class ResetPasswordToken(BaseModel):
@@ -123,3 +125,9 @@ class ResetPasswordToken(BaseModel):
         if new_password and value != new_password:
             raise ValueError("Mật khẩu xác nhận không khớp với mật khẩu mới!")
         return value
+
+class ContactAdminRequest(BaseModel):
+    email: EmailStr
+    username: str = Field(..., min_length=1, max_length=100)
+    subject: str = Field(..., min_length=1, max_length=200)
+    message: str = Field(..., min_length=10, max_length=2000)

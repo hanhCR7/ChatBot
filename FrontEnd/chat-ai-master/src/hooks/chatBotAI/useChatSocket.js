@@ -20,11 +20,8 @@ export function useChatSocket(
   const [banned, setBanned] = useState(false);
   const [banUntil, setBanUntil] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
-
-  // --- pending title để tránh warning ---
   const [pendingTitle, setPendingTitle] = useState(null);
 
-  // --- cleanup ---
   const cleanUp = () => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.close(1000, "component unmounted or chat changed");
@@ -40,7 +37,6 @@ export function useChatSocket(
     setBanUntil(null);
   };
 
-  // --- parse violation string fallback ---
   const parseViolationString = (text) => {
     const ban_time = text.includes("5 phút")
       ? 300
@@ -49,23 +45,16 @@ export function useChatSocket(
       : text.includes("1 ngày")
       ? 86400
       : 0;
-
-    return {
-      type: "violation",
-      message: text,
-      level: 1,
-      ban_time,
-    };
+    return { type: "violation", message: text, level: 1, ban_time };
   };
 
-  // --- main WS logic ---
   useEffect(() => {
     if (!shouldConnect || !chatId || !token) {
       cleanUp();
       return;
     }
 
-    cleanUp(); // clear any old socket
+    cleanUp();
 
     const wsUrl = `${
       import.meta.env.VITE_WS_BASE_URL
@@ -81,22 +70,26 @@ export function useChatSocket(
 
     socket.onmessage = (event) => {
       const raw = event.data;
+      console.log("📨 [useChatSocket] Nhận được raw message từ WebSocket:", raw);
 
       try {
         const data = JSON.parse(raw);
+        console.log("📦 [useChatSocket] Parsed data:", data);
 
-        // --- violation ---
+        // Violation
         if (data.type === "violation") {
+          console.log("🔔 [useChatSocket] Nhận được violation từ WebSocket:", data);
           onMessage?.(data);
           if (data.ban_time > 0) {
             setBanned(true);
             setBanUntil(Date.now() + data.ban_time * 1000);
+            console.log("⏰ [useChatSocket] User bị ban trong", data.ban_time, "giây");
           }
           setIsTyping(false);
           return;
         }
 
-        // --- typing ---
+        // Typing
         if (data.type === "typing") {
           setIsTyping(true);
           clearTimeout(typingTimer.current);
@@ -104,13 +97,18 @@ export function useChatSocket(
           return;
         }
 
-        // --- TITLE_UPDATED ---
+        // TITLE_UPDATED
         if (data.event === "TITLE_UPDATED") {
-          setPendingTitle(data.title); // chỉ set local state
+          setPendingTitle(data.title);
           return;
         }
 
-        // --- assistant stream done ---
+        // Skip FILE_UPLOADED events (file upload feature removed)
+        if (data.event === "FILE_UPLOADED") {
+          return;
+        }
+
+        // DONE
         if (data.event === "DONE") {
           clearTimeout(bufferTimer.current);
           if (bufferRef.current.trim()) {
@@ -126,22 +124,20 @@ export function useChatSocket(
           return;
         }
 
-        // --- normal message ---
+        // Normal message
         const role = data.role || data.payload?.role;
         const content = data.content || data.payload?.content || "";
         const timestamp = data.timestamp || data.payload?.timestamp;
 
         if (role === "assistant") {
-          // append to buffer
           bufferRef.current += content;
           onPartialBuffer?.(bufferRef.current);
 
-          // flush after 2s idle
           clearTimeout(bufferTimer.current);
           bufferTimer.current = setTimeout(() => {
             if (bufferRef.current.trim()) {
               onMessage?.({
-                role: "assistant",
+                role,
                 content: bufferRef.current.trim(),
                 timestamp,
               });
@@ -153,17 +149,12 @@ export function useChatSocket(
           onMessage?.({ role, content, timestamp });
         }
       } catch {
-        // fallback nếu server gửi plain string warning
         if (
           typeof raw === "string" &&
-          (raw.includes("Cảnh báo") ||
-            raw.includes("cấm chat") ||
-            raw.includes("Tài khoản của bạn đã bị khóa") ||
-            raw.includes("Email thông báo"))
+          (raw.includes("Cảnh báo") || raw.includes("cấm chat"))
         ) {
           const violationData = parseViolationString(raw);
           onMessage?.(violationData);
-
           if (violationData.ban_time > 0) {
             setBanned(true);
             setBanUntil(Date.now() + violationData.ban_time * 1000);
@@ -187,7 +178,6 @@ export function useChatSocket(
     return () => cleanUp();
   }, [chatId, token, shouldConnect, retryCount, onMessage, onPartialBuffer]);
 
-  // --- gọi onUpdateTitle sau khi render xong để tránh warning ---
   useEffect(() => {
     if (pendingTitle && onUpdateTitle) {
       onUpdateTitle(pendingTitle);
@@ -195,7 +185,6 @@ export function useChatSocket(
     }
   }, [pendingTitle, onUpdateTitle]);
 
-  // --- send message ---
   const sendMessage = useCallback(
     (text) => {
       if (banned) return false;
@@ -210,7 +199,6 @@ export function useChatSocket(
     [connected, banned]
   );
 
-  // --- send typing ---
   const sendTyping = useCallback(() => {
     const now = Date.now();
     if (
@@ -223,5 +211,28 @@ export function useChatSocket(
     }
   }, [connected]);
 
-  return { sendMessage, sendTyping, isTyping, connected, banned, banUntil };
+  // File upload via WS
+  const requestFileAnalysis = useCallback(
+    (fileInfo) => {
+      if (connected && socketRef.current?.readyState === WebSocket.OPEN) {
+        socketRef.current.send(
+          JSON.stringify({ action: "file_upload", file_info: fileInfo })
+        );
+        setIsTyping(true);
+        return true;
+      }
+      return false;
+    },
+    [connected]
+  );
+
+  return {
+    sendMessage,
+    sendTyping,
+    isTyping,
+    connected,
+    banned,
+    banUntil,
+    requestFileAnalysis,
+  };
 }

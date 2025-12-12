@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { Mail, Lock, User, Key } from "lucide-react";
+import { Mail, Lock, User, Sparkles, HelpCircle } from "lucide-react";
 import { useAuthApi } from "../hooks/useAuthAPI";
 import { useNavigate } from "react-router-dom";
 import PasswordStrength from "./common/PasswordStrength";
 import PasswordInput from "./common/PasswordInput";
+import ContactAdminModal from "./ContactAdminModal";
 
 export default function AuthForm({ setUserId, onNext }) {
   const [mode, setMode] = useState("login"); // login | signup
@@ -15,6 +17,8 @@ export default function AuthForm({ setUserId, onNext }) {
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
 
   // State cho form signup
   const [firstName, setFirstName] = useState("");
@@ -32,6 +36,11 @@ export default function AuthForm({ setUserId, onNext }) {
     }
   }, []);
 
+  // Cập nhật document title khi đổi mode
+  useEffect(() => {
+    document.title = mode === "signup" ? "Đăng ký" : "Đăng nhập";
+  }, [mode]);
+
   // Xử lý đăng nhập
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -48,9 +57,18 @@ export default function AuthForm({ setUserId, onNext }) {
       toast.success(res.message);
       onNext();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Đăng nhập thất bại");
+      const errorDetail = err.response?.data?.detail || "Đăng nhập thất bại";
+      toast.error(errorDetail);
+      
+      // Nếu tài khoản bị chặn (403), hiển thị modal liên hệ admin
+      if (err.response?.status === 403 && errorDetail.includes("vô hiệu hóa")) {
+        // Lưu thông tin user để dùng trong modal
+        setUserEmail(""); // Có thể lấy từ form hoặc để user nhập
+        setShowContactModal(true);
+      }
     }
   };
+  
   // Xử lý đăng ký
   const handleSignUp = async (e) => {
     e.preventDefault();
@@ -89,161 +107,226 @@ export default function AuthForm({ setUserId, onNext }) {
       toast.error(err.response?.data?.detail || "Đăng ký thất bại");
     }
   };
+  
   return (
-    <div className="max-w-md mx-auto p-8 bg-white rounded-2xl shadow-2xl space-y-6">
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="w-full max-w-md mx-auto p-8 bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-gray-200 dark:border-gray-800"
+    >
+      {/* Logo */}
+      <div className="flex justify-center mb-8">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+          <Sparkles className="w-8 h-8 text-white" />
+        </div>
+      </div>
+
+      {/* Title */}
+      <h1 className="text-3xl font-bold text-center mb-2 bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
+        JarVis AI
+      </h1>
+      <p className="text-center text-gray-600 dark:text-gray-400 mb-8">
+        Trợ lý lập trình thông minh
+      </p>
+
       {/* Switch mode */}
-      <div className="flex justify-center gap-6 mb-6">
-        <button
-          className={`py-2 px-6 rounded-full font-semibold transition ${
+      <div className="flex justify-center gap-2 mb-8 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className={`flex-1 py-2.5 px-6 rounded-lg font-semibold transition-all ${
             mode === "login"
-              ? "bg-blue-600 text-white shadow-md"
-              : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+              ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg"
+              : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
           }`}
           onClick={() => setMode("login")}
         >
           Đăng nhập
-        </button>
-        <button
-          className={`py-2 px-6 rounded-full font-semibold transition ${
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className={`flex-1 py-2.5 px-6 rounded-lg font-semibold transition-all ${
             mode === "signup"
-              ? "bg-blue-600 text-white shadow-md"
-              : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+              ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg"
+              : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
           }`}
           onClick={() => setMode("signup")}
         >
           Đăng ký
-        </button>
+        </motion.button>
       </div>
+
       {/* Form Login */}
-      {mode === "login" && (
-        <form onSubmit={handleLogin} className="space-y-5">
-          <div className="relative">
-            <User className="absolute left-3 top-3.5 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Tên đăng nhập"
-              value={loginUsername}
-              onChange={(e) => setLoginUsername(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-          <div className="relative">
-            <Lock className="absolute left-3 top-3.5 text-gray-400" size={20} />
-            <PasswordInput
-              id="login-password"
-              value={loginPassword}
-              onChange={(e) => setLoginPassword(e.target.value)}
-              placeholder="Nhập mật khẩu"
-            />
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
+      <AnimatePresence mode="wait">
+        {mode === "login" && (
+          <motion.form
+            key="login"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.2 }}
+            onSubmit={handleLogin}
+            className="space-y-5"
+          >
+            <div className="relative">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
               <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={() => setRememberMe(!rememberMe)}
-                className="accent-blue-600"
+                type="text"
+                placeholder="Tên đăng nhập"
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                className="w-full pl-12 pr-4 py-3.5 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 dark:bg-gray-800 dark:text-white transition-all"
+                required
               />
-              Ghi nhớ đăng nhập
-            </label>
-            <button
-              type="button"
-              className="text-blue-600 hover:underline"
-              onClick={() => navigate("/forgot-password")}
+            </div>
+            <div className="relative">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
+              <PasswordInput
+                id="login-password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="Nhập mật khẩu"
+              />
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-gray-700 dark:text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={() => setRememberMe(!rememberMe)}
+                  className="w-4 h-4 accent-blue-600 rounded"
+                />
+                Ghi nhớ đăng nhập
+              </label>
+              <button
+                type="button"
+                className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                onClick={() => navigate("/forgot-password")}
+              >
+                Quên mật khẩu?
+              </button>
+            </div>
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => setShowContactModal(true)}
+                className="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center justify-center gap-1 mx-auto transition-colors"
+              >
+                <HelpCircle className="w-4 h-4" />
+                Tài khoản bị chặn? Liên hệ Admin
+              </button>
+            </div>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              type="submit"
+              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg hover:shadow-xl"
             >
-              Quên mật khẩu?
-            </button>
-          </div>
-          <button
-            type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition duration-200"
+              Đăng nhập
+            </motion.button>
+          </motion.form>
+        )}
+
+        {/* Form Signup */}
+        {mode === "signup" && (
+          <motion.form
+            key="signup"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.2 }}
+            onSubmit={handleSignUp}
+            className="space-y-5"
           >
-            Đăng nhập
-          </button>
-        </form>
-      )}
-      {/* Form Signup */}
-      {mode === "signup" && (
-        <form onSubmit={handleSignUp} className="space-y-5">
-          <div className="flex gap-4">
-            <div className="relative flex-1">
-              <User
-                className="absolute left-3 top-3.5 text-gray-400"
-                size={20}
-              />
+            <div className="flex gap-3">
+              <div className="relative flex-1">
+                <User
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
+                  size={20}
+                />
+                <input
+                  type="text"
+                  placeholder="Họ"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3.5 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 dark:bg-gray-800 dark:text-white transition-all"
+                  required
+                />
+              </div>
+              <div className="relative flex-1">
+                <User
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
+                  size={20}
+                />
+                <input
+                  type="text"
+                  placeholder="Tên"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3.5 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 dark:bg-gray-800 dark:text-white transition-all"
+                  required
+                />
+              </div>
+            </div>
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
               <input
-                type="text"
-                placeholder="Họ"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                type="email"
+                placeholder="Email"
+                value={signupEmail}
+                onChange={(e) => setSignupEmail(e.target.value)}
+                className="w-full pl-12 pr-4 py-3.5 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 dark:bg-gray-800 dark:text-white transition-all"
                 required
               />
             </div>
-            <div className="relative flex-1">
-              <User
-                className="absolute left-3 top-3.5 text-gray-400"
-                size={20}
-              />
+            <div className="relative">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
               <input
                 type="text"
-                placeholder="Tên"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Tên đăng nhập"
+                value={signupUsername}
+                onChange={(e) => setSignupUsername(e.target.value)}
+                className="w-full pl-12 pr-4 py-3.5 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 dark:bg-gray-800 dark:text-white transition-all"
                 required
               />
             </div>
-          </div>
-          <div className="relative">
-            <Mail className="absolute left-3 top-3.5 text-gray-400" size={20} />
-            <input
-              type="email"
-              placeholder="Email"
-              value={signupEmail}
-              onChange={(e) => setSignupEmail(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-          <div className="relative">
-            <User className="absolute left-3 top-3.5 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Tên đăng nhập"
-              value={signupUsername}
-              onChange={(e) => setSignupUsername(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-          <div className="relative">
-            <Key className="absolute left-3 top-3.5 text-gray-400" size={20} />
-            <PasswordInput
-              id="signup-password"
-              value={signupPassword}
-              onChange={(e) => setSignupPassword(e.target.value)}
-              placeholder="Nhập mật khẩu"
-            />
-            <PasswordStrength
-              password={signupPassword}
-              onValidChange={setIsValidPassword}
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={!isValidPassword}
-            className={`w-full py-2 rounded-md ${
-              isValidPassword
-                ? "bg-blue-600 text-white hover:bg-blue-700"
-                : "bg-gray-300 text-gray-500 cursor-not-allowed"
-            }`}
-          >
-            Đăng ký
-          </button>
-        </form>
-      )}
-    </div>
+            <div className="relative">
+              <PasswordInput
+                id="signup-password"
+                value={signupPassword}
+                onChange={(e) => setSignupPassword(e.target.value)}
+                placeholder="Nhập mật khẩu"
+              />
+              <PasswordStrength
+                password={signupPassword}
+                onValidChange={setIsValidPassword}
+              />
+            </div>
+            <motion.button
+              whileHover={{ scale: isValidPassword ? 1.02 : 1 }}
+              whileTap={{ scale: isValidPassword ? 0.98 : 1 }}
+              type="submit"
+              disabled={!isValidPassword}
+              className={`w-full py-3.5 rounded-xl font-bold transition-all ${
+                isValidPassword
+                  ? "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl"
+                  : "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+              }`}
+            >
+              Đăng ký
+            </motion.button>
+          </motion.form>
+        )}
+      </AnimatePresence>
+
+      {/* Contact Admin Modal */}
+      <ContactAdminModal
+        isOpen={showContactModal}
+        onClose={() => setShowContactModal(false)}
+        username={loginUsername}
+        email={userEmail}
+      />
+    </motion.div>
   );
 }

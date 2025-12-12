@@ -18,8 +18,9 @@ export const useAuthApi = () => {
   };
 
   const resendOtp = async (user_id) => {
-    const res = await axiosLogin.post("api/identity_service/resend_otp", {
+    const res = await axiosLogin.post("api/identity_service/resend-otp", {
       user_id,
+      otp_type: "login",
     });
     return res.data;
   };
@@ -80,6 +81,17 @@ export const useAuthApi = () => {
     localStorage.removeItem("refresh_token");
     return res.data;
   };
+
+  const contactAdmin = async ({ email, username, subject, message }) => {
+    const res = await axiosLogin.post("/api/identity_service/contact-admin", {
+      email,
+      username,
+      subject,
+      message,
+    });
+    return res.data;
+  };
+
   return {
     login,
     validateOtp,
@@ -90,6 +102,7 @@ export const useAuthApi = () => {
     resetPasswordRequest,
     resetPassword,
     logout,
+    contactAdmin,
   };
 };
 export default useAuthApi;

@@ -1,35 +1,80 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
   <head>
     <meta charset="utf-8" />
-    <title>Tài khoản bị khóa</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="./fontawesome-free-6.5.1-web/css/all.css">
+    <title>Tài khoản bị khóa - JarVis AI</title>
   </head>
-  <body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
+  <body style="margin:0;padding:0;background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);padding:40px 20px;">
       <tr>
         <td align="center">
-          <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 4px 8px rgba(0,0,0,0.05);">
+          <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.15);max-width:100%;">
+            <!-- Header with Gradient -->
             <tr>
-              <td style="background:#dc2626;color:#ffffff;text-align:center;padding:24px;font-size:24px;font-weight:bold;">
-                JarVis AI
+              <td style="background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%);color:#ffffff;text-align:center;padding:40px 32px;">
+                <div style="font-size:32px;font-weight:bold;margin-bottom:8px;letter-spacing:-0.5px;">
+                  <i class="fa-solid fa-lock"></i> JarVis AI
+                </div>
+                <div style="font-size:14px;opacity:0.9;font-weight:300;">
+                  Thông báo bảo mật
+                </div>
               </td>
             </tr>
+            
+            <!-- Content -->
             <tr>
-              <td style="padding:32px;color:#333;">
-                <h2 style="margin-top:0;color:#dc2626;">Tài khoản bị khóa</h2>
-                <p>Chào {{ username }},</p>
-                <p>Tài khoản của bạn đã bị khóa do đã quá lâu không đăng nhập.</p>
-                <p>Vui lòng liên hệ Admin để xác nhận và mở khóa tài khoản của bạn:</p>
-                <p style="text-align:center;margin:32px 0;">
-                  <a href="{{ contact_link }}" style="background:#2563eb;color:#fff;text-decoration:none;padding:14px 28px;border-radius:6px;display:inline-block;font-weight:bold;">
-                    Liên hệ Admin
-                  </a>
+              <td style="padding:48px 40px;color:#1f2937;line-height:1.6;">
+                <h2 style="margin:0 0 24px 0;color:#dc2626;font-size:28px;font-weight:700;line-height:1.2;">
+                  Tài khoản bị khóa
+                </h2>
+                <p style="margin:0 0 16px 0;font-size:16px;color:#4b5563;">
+                  Chào <strong style="color:#111827;">{{username}}</strong>,
+                </p>
+                <p style="margin:0 0 24px 0;font-size:16px;color:#4b5563;">
+                  Chúng tôi thông báo rằng tài khoản của bạn đã bị khóa do đã quá lâu không đăng nhập hoặc do các hoạt động bất thường.
+                </p>
+                
+                <!-- Info Box -->
+                <div style="margin:24px 0;padding:20px;background:#fef2f2;border-left:4px solid #ef4444;border-radius:8px;">
+                  <p style="margin:0 0 12px 0;font-size:15px;color:#991b1b;font-weight:600;">
+                    <i class="fa-solid fa-info-circle"></i> Thông tin tài khoản:
+                  </p>
+                  <ul style="margin:0;padding-left:20px;color:#7f1d1d;font-size:14px;line-height:1.8;">
+                    <li>Tài khoản đã bị khóa vĩnh viễn</li>
+                    <li>Bạn không thể đăng nhập cho đến khi được mở khóa</li>
+                    <li>Vui lòng liên hệ quản trị viên để được hỗ trợ</li>
+                  </ul>
+                </div>
+                
+                <!-- CTA Button -->
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin:32px 0;">
+                  <tr>
+                    <td align="center">
+                      <a href="{{contact_link}}" style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:12px;display:inline-block;font-weight:600;font-size:16px;box-shadow:0 8px 20px rgba(102, 126, 234, 0.4);">
+                        <i class="fa-solid fa-envelope"></i> Liên hệ Admin
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+                
+                <!-- Help Text -->
+                <p style="margin:24px 0 0 0;font-size:14px;color:#6b7280;text-align:center;">
+                  Nếu bạn nghĩ đây là nhầm lẫn, vui lòng liên hệ với chúng tôi ngay để được hỗ trợ.
                 </p>
               </td>
             </tr>
+            
+            <!-- Footer -->
             <tr>
-              <td style="background:#f3f4f6;text-align:center;padding:16px;font-size:12px;color:#888;">
-                © 2025 JarVis AI. Mọi quyền được bảo lưu.
+              <td style="background:linear-gradient(to right, #f9fafb, #f3f4f6);text-align:center;padding:32px 40px;border-top:1px solid #e5e7eb;">
+                <p style="margin:0 0 16px 0;font-size:14px;color:#6b7280;">
+                  <i class="fa-regular fa-copyright"></i> 2025 JarVis AI. Mọi quyền được bảo lưu.
+                </p>
+                <p style="margin:0;font-size:12px;color:#9ca3af;">
+                  Email này được gửi tự động, vui lòng không trả lời.
+                </p>
               </td>
             </tr>
           </table>

@@ -6,7 +6,9 @@ from user_schemas import LogResponse
 from connect_service import validate_token_user
 from verify_api_key import verify_api_key
 from dotenv import load_dotenv
+from service.redis_client import redis_clients
 import os
+import json
 router = APIRouter(prefix="/api/user_service",tags=["logs"])
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
@@ -15,9 +17,19 @@ async def get_logs(db: db_dependency, page: int=1, limit: int=10 ,current_user: 
     """Lấy danh sách tất cả các bản ghi đã thêm vào hệ thống."""
     if current_user["role"] != "Admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập vào tài nguyên này!!!")
+    
+    # Kiểm tra cache
+    cache_key = f"logs_page_{page}_limit_{limit}"
+    if redis_clients:
+        try:
+            cached_data = redis_clients.get(cache_key)
+            if cached_data:
+                return json.loads(cached_data)
+        except Exception as e:
+            print(f"Redis cache read error: {e}")
+    
     # Lấy tổng số bản ghi
     total_logs = db.query(Log).count()
-    print(total_logs)
     list_logs = (
         db.query(Log)
         .order_by(Log.id.desc())
@@ -25,14 +37,23 @@ async def get_logs(db: db_dependency, page: int=1, limit: int=10 ,current_user: 
         .limit(limit)
         .all()
     )
-    list_log_reponse = [LogResponse.from_orm(log) for log in list_logs]
-    return {
+    list_log_reponse = [LogResponse.from_orm(log).model_dump() for log in list_logs]
+    result = {
         "detail": "Tất cả các bản ghi đã được truy xuất thành công",
         "total": total_logs,
         "page": page,
         "limit": limit,
         "logs": list_log_reponse
     }
+    
+    # Lưu vào cache (15 giây - logs thay đổi thường xuyên)
+    if redis_clients:
+        try:
+            redis_clients.setex(cache_key, 15, json.dumps(result, default=str))
+        except Exception as e:
+            print(f"Redis cache write error: {e}")
+    
+    return result
 @router.get("/user/{user_id}/logs", status_code=status.HTTP_200_OK)
 async def get_user_logs(user_id: int, db: db_dependency, page: int=1, limit: int=10, current_user: dict =Depends(validate_token_user)):
     """Lấy danh sách tất cả các bản ghi đã thêm vào hệ thống của người dùng với ID truyền vào."""
@@ -50,7 +71,7 @@ async def get_user_logs(user_id: int, db: db_dependency, page: int=1, limit: int
         .limit(limit)
         .all()
     )
-    list_log_reponse = [LogResponse.from_orm(log) for log in list_logs]
+    list_log_reponse = [LogResponse.from_orm(log).model_dump() for log in list_logs]
     return {
         "detail": "Nhật ký người dùng đã được lấy thành công",
         "total": total_logs_by_user,

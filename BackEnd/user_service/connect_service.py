@@ -15,7 +15,9 @@ async def validate_token_user(token: str = Depends(oauth2_scheme)):
     headers = {
         "Authorization": f"Bearer {token}",
     }
-    async with httpx.AsyncClient(follow_redirects=True) as client:
+    # Cấu hình timeout: 10 giây cho request, 5 giây cho connection
+    timeout = httpx.Timeout(10.0, connect=5.0)
+    async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
         try:
             response = await client.get(
                 f"{IDENTITY_URL}validate-token",
@@ -35,18 +37,24 @@ async def validate_token_user(token: str = Depends(oauth2_scheme)):
                 "last_name": data.get("last_name", ""),
                 "role": data["role"],
             }
+        except httpx.TimeoutException as e:
+            raise HTTPException(status_code=500, detail=f"Timeout khi kết nối đến dịch vụ xác thực. Vui lòng thử lại sau.")
         except httpx.RequestError as e:
             raise HTTPException(status_code=500, detail=f"Lỗi khi gửi yêu cầu đến dịch vụ xác thực: {repr(e)}")
 async def assign_admin_role_to_user(user_id: int):
     """Gọi HTTP request để gán role Admin"""
     headers = {"X-API-Key": SERVICE_KEY}
     data = {"user_id": user_id, "role_name": "Admin"}
-    async with httpx.AsyncClient() as client:
-        r = await client.post(f"{SYSTEM_ADMIN}user-roles/assign-admin-roles", json=data, headers=headers)
-        if r.status_code != 200:
-            print("Gán quyền Admin không thành công:", r.status_code, r.text)
-        else:
-            print("Gán quyền Admin thành công:", r.json())
+    timeout = httpx.Timeout(10.0, connect=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        try:
+            r = await client.post(f"{SYSTEM_ADMIN}user-roles/assign-admin-roles", json=data, headers=headers)
+            if r.status_code != 200:
+                print("Gán quyền Admin không thành công:", r.status_code, r.text)
+            else:
+                print("Gán quyền Admin thành công:", r.json())
+        except httpx.RequestError as e:
+            print(f"Lỗi khi gán quyền Admin: {repr(e)}")
 # Gửi mã otp khi thay dôi đổi thông tin nhạy cảm
 # Send Email OTP
 async def send_email_otp(user_id: int, email: str, otp_type: str):
@@ -70,7 +78,8 @@ async def send_email_otp(user_id: int, email: str, otp_type: str):
             raise HTTPException(status_code=500, detail=f"Lỗi khi gửi mail thông báo: {repr(e)}")
 # Xác thực mã OTP
 async def validate_otp(user_id: int, otp: str):
-    async with httpx.AsyncClient() as client:
+    timeout = httpx.Timeout(10.0, connect=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.post(
                 f'{EMAIL_URL}validate-otp/',
@@ -78,11 +87,14 @@ async def validate_otp(user_id: int, otp: str):
             )
             if response.status_code == 200:
                 return response.json()
+        except httpx.TimeoutException as e:
+            raise HTTPException(status_code=500, detail=f"Timeout khi xác thực OTP. Vui lòng thử lại sau.")
         except httpx.RequestError as e:
-            raise HTTPException(status_code=500, detail=f"Lỗi khi gửi mail thông báo: {repr(e)}")
+            raise HTTPException(status_code=500, detail=f"Lỗi khi xác thực OTP: {repr(e)}")
 #Gửi mail thông báo cho user bị khóa do không login quá 15 ngày
 async def send_user_lock_notification(recipient: str, username: str):
-    async with httpx.AsyncClient() as client:
+    timeout = httpx.Timeout(15.0, connect=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.post(
                 f"{EMAIL_URL}send-user-lock-notification/",
@@ -90,6 +102,9 @@ async def send_user_lock_notification(recipient: str, username: str):
             )
             if response.status_code == 200:
                 return response.json()
+        except httpx.TimeoutException as e:
+            print(f"Timeout khi gửi mail thông báo khóa tài khoản: {repr(e)}")
+            raise HTTPException(status_code=500, detail=f"Timeout khi gửi mail thông báo. Vui lòng thử lại sau.")
         except httpx.ReadError as e:
             raise HTTPException(status_code=500, detail=f"Lỗi khi gửi mail thông báo: {repr(e)}")
 

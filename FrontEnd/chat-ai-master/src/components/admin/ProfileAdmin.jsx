@@ -1,6 +1,6 @@
 // src/components/admin/ProfileModal.jsx
 import { useState } from "react";
-import { X } from "lucide-react";
+import { X, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useProfileAdmin } from "@/hooks/admin/useProfileAdmin";
@@ -9,6 +9,7 @@ import PasswordInput from "../common/PasswordInput";
 import { useNavigate } from "react-router-dom";
 import { set } from "date-fns";
 import { validate } from "uuid";
+import SendEmailModal from "../SendEmailModal";
 
 export default function ProfileModal({ open, onClose, admin }) {
   const { getUpdateAdmin } = useProfileAdmin();
@@ -37,6 +38,7 @@ export default function ProfileModal({ open, onClose, admin }) {
   });
   const [step, setStep] = useState(1); // Step 1: Enter old password, Step 2: Enter OTP and new password
   const [loading, setLoading] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
 
   const handleChangeProfile = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -82,7 +84,7 @@ export default function ProfileModal({ open, onClose, admin }) {
       });
       toast.success("Đổi mật khẩu thành công!");
       await logout();
-      navigate("/ChatBot/login");
+      navigate("/login");
     } catch(err){
       console.error(err);
       toast.error("Đổi mật khẩu thất bại! Vui lòng thử lại.");
@@ -130,6 +132,7 @@ export default function ProfileModal({ open, onClose, admin }) {
             { key: "info", label: "Profile Info" },
             { key: "edit", label: "Edit Profile" },
             { key: "password", label: "Change Password" },
+            { key: "email", label: "Send Email" },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -265,8 +268,35 @@ export default function ProfileModal({ open, onClose, admin }) {
               )}
             </div>
           )}
+
+          {activeTab === "email" && (
+            <div className="space-y-4">
+              <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-3 mb-2">
+                  <Mail className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  <h3 className="font-semibold text-blue-900 dark:text-blue-100">
+                    Gửi Email
+                  </h3>
+                </div>
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Gửi email đến bất kỳ địa chỉ email nào. Bạn có thể sử dụng HTML để định dạng nội dung.
+                </p>
+              </div>
+              <Button
+                onClick={() => setEmailModalOpen(true)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                Mở Form Gửi Email
+              </Button>
+            </div>
+          )}
         </div>
       </div>
+      <SendEmailModal
+        open={emailModalOpen}
+        onClose={() => setEmailModalOpen(false)}
+      />
     </div>
   );
 }

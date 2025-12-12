@@ -40,26 +40,28 @@ async def generate_title(messages: list[str]) -> str:
     if lang.startswith("vi"):
         default_title = "Cuộc trò chuyện mới"
         prompt = (
-            "Bạn là AI tạo tiêu đề ngắn gọn, súc tích, tổng quát cho cuộc hội thoại.\n"
-            "- Trả về 1 cụm từ danh từ ngắn gọn (max 6 từ).\n"
-            "- KHÔNG viết câu, KHÔNG giải thích.\n"
-            "- KHÔNG viết 'Tiêu đề:' hoặc 'Title:'.\n"
-            "- KHÔNG ký tự đặc biệt hay dấu câu.\n"
-            "- Chủ đề cần tổng quát, dễ hiểu, giống phong cách ChatGPT.\n\n"
+            "Bạn là AI chuyên tạo tiêu đề ngắn gọn, súc tích cho cuộc hội thoại.\n\n"
+            "YÊU CẦU:\n"
+            "- Trả về CHỈ 1 cụm từ danh từ (tối đa 6 từ)\n"
+            "- KHÔNG viết câu hoàn chỉnh, KHÔNG giải thích\n"
+            "- KHÔNG thêm prefix như 'Tiêu đề:', 'Title:', hoặc dấu câu\n"
+            "- Tiêu đề phải tổng quát, dễ hiểu, phù hợp với nội dung chính của cuộc trò chuyện\n"
+            "- Phong cách giống ChatGPT: ngắn gọn, rõ ràng\n\n"
             f"Cuộc hội thoại:\n{content}\n\n"
-            "Chỉ trả về TIÊU ĐỀ:"
+            "Trả về CHỈ tiêu đề (không có gì khác):"
         )
     else:
         default_title = "New Chat"
         prompt = (
-            "You are an AI that generates short, clear, general titles for chat conversations.\n"
-            "- Output ONLY one short noun phrase, max 6 words.\n"
-            "- Do not write a sentence, do not explain.\n"
-            "- Do not write 'Title:' or 'Tiêu đề:'.\n"
-            "- No punctuation or special characters.\n"
-            "- Make it general and easy to understand, ChatGPT style.\n\n"
+            "You are an AI specialized in generating short, concise titles for chat conversations.\n\n"
+            "REQUIREMENTS:\n"
+            "- Output ONLY one noun phrase (maximum 6 words)\n"
+            "- Do NOT write a complete sentence, do NOT explain\n"
+            "- Do NOT add prefixes like 'Title:', 'Tiêu đề:', or punctuation\n"
+            "- Title must be general, easy to understand, relevant to the main conversation content\n"
+            "- ChatGPT style: short and clear\n\n"
             f"Conversation:\n{content}\n\n"
-            "Answer ONLY with the TITLE:"
+            "Return ONLY the title (nothing else):"
         )
 
     try:

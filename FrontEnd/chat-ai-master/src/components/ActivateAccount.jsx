@@ -76,7 +76,7 @@ export default function ActivateAccount() {
               </Button>
               <Button
                 className="w-full"
-                onClick={() => navigate("/resend-activation")}
+                onClick={() => navigate("/ChatBot/resend-activation")}
               >
                 Gửi lại email
               </Button>

@@ -2,6 +2,7 @@ import asyncio
 import io
 import os
 import uuid
+import json
 import pandas as pd
 from pytz import UTC
 from dotenv import load_dotenv
@@ -14,6 +15,7 @@ from connect_service import validate_token_user, send_user_lock_notification, se
 from routers.logs import create_log
 from verify_api_key import verify_api_key
 from security import hash_password, verify_password
+from service.redis_client import redis_clients
 from user_schemas import (
     CreateUserRequest, AdminUpdateUserRequest, UpdateUserRequest, UserResponse, 
     UserStatus, UpdatePassword, AuthRequest, ListUserActive, 
@@ -29,23 +31,63 @@ async def get_all_user(db: db_dependency, current_user: dict = Depends(validate_
     if current_user["role"] != "Admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập vào tài nguyên này")
     user_id = current_user["user_id"]
+    
+    # Kiểm tra cache
+    cache_key = "all_users_list"
+    if redis_clients:
+        try:
+            cached_data = redis_clients.get(cache_key)
+            if cached_data:
+                return json.loads(cached_data)
+        except Exception as e:
+            print(f"Redis cache read error: {e}")
+    
+    # Query database
     list_user = db.query(Users).order_by(Users.id).all()
-    user_list_response = [UserResponse.from_orm(user) for user in list_user]
-    await create_log(user_id, "Đã xem danh sách người dùng.",db)
-    return {
+    user_list_response = [UserResponse.from_orm(user).model_dump() for user in list_user]
+    result = {
         "details": "List user",
         "users": user_list_response
     }
+    
+    # Lưu vào cache (30 giây)
+    if redis_clients:
+        try:
+            redis_clients.setex(cache_key, 30, json.dumps(result, default=str))
+        except Exception as e:
+            print(f"Redis cache write error: {e}")
+    
+    await create_log(user_id, "Đã xem danh sách người dùng.",db)
+    return result
 @router.get("/user/{user_id}", status_code=status.HTTP_200_OK)
 async def get_user_by_id(user_id: int, db: db_dependency):
     """Lấy thông tin của user theo ID."""
+    # Kiểm tra cache
+    cache_key = f"user_{user_id}"
+    if redis_clients:
+        try:
+            cached_data = redis_clients.get(cache_key)
+            if cached_data:
+                return json.loads(cached_data)
+        except Exception as e:
+            print(f"Redis cache read error: {e}")
+    
     user = db.query(Users).filter(Users.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại!!!")
-    return {
-        "details": "User by ID",
-        "user": UserResponse.from_orm(user)
-    }
+
+    user_response = UserResponse.from_orm(user)
+    # Convert Pydantic model to dict để đảm bảo consistency
+    user_dict = user_response.model_dump() if hasattr(user_response, 'model_dump') else user_response.dict()
+    
+    # Lưu vào cache (60 giây) - lưu dict trực tiếp
+    if redis_clients:
+        try:
+            redis_clients.setex(cache_key, 60, json.dumps(user_dict, default=str))
+        except Exception as e:
+            print(f"Redis cache write error: {e}")
+    
+    return user_dict
 @router.post('/authenticate', status_code=status.HTTP_200_OK)
 async def authenticate_user(data: AuthRequest,db: db_dependency):
     """Xác thực tài khoản người dùng."""
@@ -264,7 +306,7 @@ async def get_list_active_user(db: db_dependency, current_user: dict = Depends(v
     if current_user["role"] != "Admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập vào tài nguyên này!!!")
     list_user = db.query(Users).order_by(Users.id).all()
-    user_list_response = [ListUserActive.from_orm(user) for user in list_user]
+    user_list_response = [ListUserActive.from_orm(user).model_dump() for user in list_user]
     await create_log(current_user["user_id"], f"{current_user['username']} Đã xem danh sách người dùng hoạt động.",db)
     return {
         "details": "List user active",
@@ -316,7 +358,8 @@ async def activate_user(token: str, db: db_dependency):
     db.refresh(user)
     await create_log(user.id, f"{user.username}: Đã kích hoạt tài khoản thành công!", db)
     return {
-        "details": "Kích hoạt tài khoản thành công!"
+        "status": "success",
+        "message": "Kích hoạt tài khoản thành công!",
     }
 @router.get("/users/get-user-by-email/{email}", status_code=status.HTTP_200_OK)
 async def get_user_by_email(email:str, db: db_dependency, server_connection_key: str = Depends(verify_api_key)):
@@ -324,11 +367,10 @@ async def get_user_by_email(email:str, db: db_dependency, server_connection_key:
     user = db.query(Users).filter(Users.email == email).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại!!!")
-    return {
-        "details": "User by email",
-        "id": user.id,
-        "email": user.email,
-    }
+    user_response = UserResponse.from_orm(user)
+    # Convert Pydantic model to dict
+    user_dict = user_response.model_dump() if hasattr(user_response, 'model_dump') else user_response.dict()
+    return user_dict
 # APi ĐẶt lai mật khẩu
 @router.put("/update-password/", status_code=status.HTTP_200_OK)
 async def update_password(request: UpdatePasswordResquest, db: db_dependency, server_connection_key: str = Depends(verify_api_key)):

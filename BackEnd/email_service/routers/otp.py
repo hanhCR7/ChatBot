@@ -15,10 +15,35 @@ async def send_otp_email_endpoint(request: OTPRequest, db: Session = Depends(get
     """
     try:
         user_response = await get_user(request.user_id)
-        user_data = user_response["user"]
-        if not user_data["id"]:
+        
+        # Xử lý cả trường hợp response là dict trực tiếp hoặc có key "user"
+        if isinstance(user_response, dict):
+            if "user" in user_response:
+                # Trường hợp cũ: {"user": {...}}
+                user_data = user_response["user"]
+            else:
+                # Trường hợp mới: response là dict trực tiếp chứa user data
+                user_data = user_response
+        else:
+            # Nếu là Pydantic model hoặc object khác
+            if hasattr(user_response, 'model_dump'):
+                user_data = user_response.model_dump()
+            elif hasattr(user_response, 'dict'):
+                user_data = user_response.dict()
+            else:
+                user_data = user_response
+        
+        # Đảm bảo user_data là dict
+        if not isinstance(user_data, dict):
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Định dạng dữ liệu user không hợp lệ")
+        
+        if not user_data.get("id"):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại!")
-        username = user_data["username"]
+        
+        username = user_data.get("username", "")
+        if not username:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username không hợp lệ!")
+        
         otp = await generate_otp(db, request.user_id)
         if request.otp_type == "login":
             await send_otp_login_email(db, request.email, username, otp)

@@ -1,35 +1,77 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
   <head>
     <meta charset="utf-8" />
-    <title>Mã xác thực OTP</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="./fontawesome-free-6.5.1-web/css/all.css">
+    <title>Mã xác thực OTP - JarVis AI</title>
   </head>
-  <body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
+  <body style="margin:0;padding:0;background:linear-gradient(135deg, #10b981 0%, #059669 100%);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg, #10b981 0%, #059669 100%);padding:40px 20px;">
       <tr>
         <td align="center">
-          <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 4px 8px rgba(0,0,0,0.05);">
+          <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.15);max-width:100%;">
+            <!-- Header with Gradient -->
             <tr>
-              <td style="background:#26dc44b4;color:#ffffff;text-align:center;padding:24px;font-size:24px;font-weight:bold;">
-                JarVis AI
+              <td style="background:linear-gradient(135deg, #10b981 0%, #059669 100%);color:#ffffff;text-align:center;padding:40px 32px;">
+                <div style="font-size:32px;font-weight:bold;margin-bottom:8px;letter-spacing:-0.5px;">
+                  JarVis AI
+                </div>
+                <div style="font-size:14px;opacity:0.9;font-weight:300;">
+                  Mã xác thực đăng nhập
+                </div>
               </td>
             </tr>
+            
+            <!-- Content -->
             <tr>
-              <td style="padding:32px;color:#333;">
-                <h2 style="margin-top:0;color:#26dc54;">Mã xác thực OTP</h2>
-                <p>Chào {{username}},</p>
-                <p>Bạn vừa yêu cầu mã xác thực OTP để hoàn tất quá trình đăng nhập hoặc xác minh tài khoản.</p>
-                <p style="text-align:center;margin:24px 0;">
-                  <span style="display:inline-block;font-size:24px;font-weight:bold;padding:10px 20px;background:#26dc3e;color:#fff;border-radius:6px;letter-spacing:4px;">
-                    {{otp_code}}
-                  </span>
+              <td style="padding:48px 40px;color:#1f2937;line-height:1.6;">
+                <h2 style="margin:0 0 24px 0;color:#111827;font-size:28px;font-weight:700;line-height:1.2;">
+                  Mã xác thực OTP
+                </h2>
+                <p style="margin:0 0 16px 0;font-size:16px;color:#4b5563;">
+                  Chào <strong style="color:#111827;">{{username}}</strong>,
                 </p>
-                <p>Mã OTP này có hiệu lực trong 1 phút. Nếu bạn không yêu cầu, vui lòng bỏ qua email này.</p>
+                <p style="margin:0 0 32px 0;font-size:16px;color:#4b5563;">
+                  Bạn vừa yêu cầu mã xác thực OTP để hoàn tất quá trình đăng nhập hoặc xác minh tài khoản. Sử dụng mã bên dưới để tiếp tục:
+                </p>
+                
+                <!-- OTP Code Box -->
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin:32px 0;">
+                  <tr>
+                    <td align="center">
+                      <div style="background:linear-gradient(135deg, #10b981 0%, #059669 100%);color:#ffffff;padding:24px 40px;border-radius:16px;display:inline-block;box-shadow:0 8px 20px rgba(16, 185, 129, 0.3);">
+                        <div style="font-size:36px;font-weight:bold;letter-spacing:8px;font-family:'Courier New',monospace;text-align:center;">
+                          {{otp_code}}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+                
+                <!-- Timer Info -->
+                <p style="margin:24px 0 0 0;font-size:14px;color:#6b7280;text-align:center;">
+                  <i class="fa-regular fa-alarm-clock"></i> Mã OTP này có hiệu lực trong <strong style="color:#111827;">1 phút</strong>
+                </p>
+                
+                <!-- Security Warning -->
+                <div style="margin-top:32px;padding:16px;background:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;">
+                  <p style="margin:0;font-size:14px;color:#92400e;">
+                    <strong><i class="fa-solid fa-triangle-exclamation"></i> Lưu ý:</strong> Không chia sẻ mã OTP này với bất kỳ ai. Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email và kiểm tra bảo mật tài khoản của bạn.
+                  </p>
+                </div>
               </td>
             </tr>
+            
+            <!-- Footer -->
             <tr>
-              <td style="background:#f3f4f6;text-align:center;padding:16px;font-size:12px;color:#888;">
-                © 2025 JarVis AI. Mọi quyền được bảo lưu.
+              <td style="background:linear-gradient(to right, #f9fafb, #f3f4f6);text-align:center;padding:32px 40px;border-top:1px solid #e5e7eb;">
+                <p style="margin:0 0 16px 0;font-size:14px;color:#6b7280;">
+                  <i class="fa-regular fa-copyright"></i> 2025 JarVis AI. Mọi quyền được bảo lưu.
+                </p>
+                <p style="margin:0;font-size:12px;color:#9ca3af;">
+                  Email này được gửi tự động, vui lòng không trả lời.
+                </p>
               </td>
             </tr>
           </table>

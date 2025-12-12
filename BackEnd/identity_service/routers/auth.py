@@ -10,7 +10,7 @@ from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from typing import Optional
 from sqlalchemy.orm import Session
-from schemas import ResendOTP, SignUp, Login, ChangePassword, ResetPasswordRequest, ResetPasswordToken, VerifyOTPLogin, VerifyOTPLogin
+from schemas import ResendOTP, SignUp, Login, ChangePassword, ResetPasswordRequest, ResetPasswordToken, VerifyOTPLogin, VerifyOTPLogin, ContactAdminRequest
 from models import Role, UserRole, PasswordResetToken, OTPAttempts
 from databases import get_db
 from auth_per import get_current_user
@@ -18,7 +18,7 @@ from connect_service import (
     get_user, get_user_with_password, log_user_action, sign_up_user, 
     update_last_login, update_password, active_account, generate_activation_token, 
     send_email_otp, validate_otp, send_reset_password_email, get_user_by_email,
-    reset_update_password, send_user_lock_notification
+    reset_update_password, send_user_lock_notification, send_contact_admin_email
 )
 from service.redis_client import redis_clients, cache_user, get_cached_user
 from rate_limiter import rate_limiters
@@ -27,6 +27,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/identity_service/login")
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 RESET_PASSWORD_URL = os.getenv("RESET_PASSWORD_URL")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL") or os.getenv("DEAFULT_ADMIN_EMAIL")
 ALGORITHM = 'HS256'
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -34,6 +35,38 @@ MAX_OTP_ATTEMPTS = 5
 BLOCK_TIME = timedelta(minutes=5) 
 
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def extract_user_data(user_response):
+    """
+    Helper function để extract user data từ response của get_user()
+    Xử lý cả trường hợp response là dict trực tiếp hoặc có key "user"
+    """
+    if not user_response:
+        return None
+    
+    # Xử lý cả trường hợp response là dict trực tiếp hoặc có key "user"
+    if isinstance(user_response, dict):
+        if "user" in user_response:
+            # Trường hợp cũ: {"user": {...}}
+            user_data = user_response["user"]
+        else:
+            # Trường hợp mới: response là dict trực tiếp chứa user data
+            user_data = user_response
+    else:
+        # Nếu là Pydantic model hoặc object khác
+        if hasattr(user_response, 'model_dump'):
+            user_data = user_response.model_dump()
+        elif hasattr(user_response, 'dict'):
+            user_data = user_response.dict()
+        else:
+            user_data = user_response
+    
+    # Đảm bảo user_data là dict
+    if not isinstance(user_data, dict):
+        return None
+    
+    return user_data
+
 def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode = data.copy()
     to_encode["sub"] = str(to_encode.get("sub", ""))
@@ -80,12 +113,17 @@ async def login(login: Login):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Lỗi xác thực!!")
     if is_active != True:
         await send_user_lock_notification(user_response["email"], username)
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tài khoản của bạn bị vô hiệu hóa hoặc bạn chưa kích hoạt tài khoản thông email đã gửi. Vui lòng liên hệ Admin để mở lại tài khoản.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Tài khoản của bạn bị vô hiệu hóa hoặc bạn chưa kích hoạt tài khoản thông email đã gửi. Vui lòng sử dụng endpoint /api/identity_service/contact-admin để liên hệ Admin và yêu cầu mở lại tài khoản."
+        )
     user_data = get_cached_user(user_id)
     if not user_data:
-        user_data = await get_user(user_id)
-        cache_user(user_id, user_data)
-    otp_required = await send_email_otp(user_response["user_id"], user_response["email"], otp_type="login")
+        user_response = await get_user(user_id)
+        user_data = extract_user_data(user_response)
+        if user_data:
+            cache_user(user_id, user_data)
+    otp_required = await send_email_otp(user_id, user_response["email"], otp_type="login")
     if not otp_required or otp_required.get("status") != "success":
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Không thể gửi mã OTP. Vui lòng thử lại sau.")
     return{
@@ -106,7 +144,8 @@ async def verify_otp(request: VerifyOTPLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mã OTP không hợp lệ hoặc hết hạn.")
     redis_clients.delete(redis_key)
     user_response = await get_user(request.user_id)
-    user_data = user_response.get("user")
+    user_data = extract_user_data(user_response)
+    
     role = db.query(UserRole).filter(UserRole.user_id == request.user_id).first()
     if not user_data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tài khoản không tồn tại.")
@@ -136,10 +175,11 @@ async def sign_up(sign_up: SignUp, db: Session = Depends(get_db)):
     user_response = await sign_up_user(
         sign_up.first_name, sign_up.last_name, sign_up.username, sign_up.email, sign_up.password
     )
-    if not user_response or "user" not in user_response or "id" not in user_response["user"]:
+    user_data = extract_user_data(user_response)
+    if not user_data or "id" not in user_data:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Lỗi: Không lấy được user_id từ User Service")
     role = db.query(Role).filter(Role.name == "User").first()
-    user_id = user_response["user"]["id"]
+    user_id = user_data["id"]
     db.add(UserRole(user_id=user_id, role_id=role.id))
     db.commit()
     activation_response = await generate_activation_token(user_id)
@@ -152,7 +192,7 @@ async def sign_up(sign_up: SignUp, db: Session = Depends(get_db)):
     await log_user_action(user_id, f"{sign_up.username} đã đăng ký thành công!")
     return {
         "message": "Người dùng đã đăng ký thành công! Email kích hoạt đã được gửi.", 
-        "user_id": user_response["user"]["id"],
+        "user_id": user_id,
         "username": sign_up.username,
         "email": sign_up.email
     }
@@ -229,12 +269,12 @@ async def validate_token(token: str = Depends(oauth2_scheme), db: Session = Depe
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token không đúng")
     # Lấy user từ User Service
     user_response = await get_user(user_id)
-    if not user_response or "user" not in user_response:
+    user_data = extract_user_data(user_response)
+    if not user_data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại!")
-    user_data = user_response['user']  # Lấy thông tin người dùng từ 'user'
     return {
-        "user_id": user_data["id"],
-        "username": user_data["username"],
+        "user_id": user_data.get("id") or user_data.get("user_id"),
+        "username": user_data.get("username"),
         "role": role
     }
 # Refresh Token
@@ -273,11 +313,31 @@ async def reset_password_request(request: ResetPasswordRequest, db: Session = De
     )
     db.add(db_token)
     db.commit()
-    reset_link = f"{os.getenv('RESET_PASSWORD_URL')}?token={token}"
-    email_response = await send_reset_password_email(request.email, reset_link)
-    if not email_response or email_response.get("status") != "success":
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Không thể gửi email đặt lại mật khẩu")
-    return {"message": "Email đặt lại mật khẩu đã được gửi đến địa chỉ email của bạn."}
+    reset_link = f"{RESET_PASSWORD_URL}?token={token}"
+    try:
+        email_response = await send_reset_password_email(request.email, reset_link)
+        if not email_response:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                detail="Email service không trả về response"
+            )
+        # Kiểm tra status trong response
+        if email_response.get("status") != "success":
+            error_msg = email_response.get("message") or email_response.get("detail") or "Không thể gửi email đặt lại mật khẩu"
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                detail=error_msg
+            )
+        return {"message": "Email đặt lại mật khẩu đã được gửi đến địa chỉ email của bạn."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Log lỗi để debug
+        print(f"[ERROR] reset_password_request: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi gửi email đặt lại mật khẩu: {str(e)}"
+        )
 # APi đặt lại password
 @router.post("/reset-password", status_code=status.HTTP_200_OK)
 async def reset_password(resquest: ResetPasswordToken, db: Session = Depends(get_db)):
@@ -310,15 +370,59 @@ async def reset_password(resquest: ResetPasswordToken, db: Session = Depends(get
 async def resend_otp(request: ResendOTP, db: Session = Depends(get_db)):
     """Trang gửi lại mã OTP"""
     user_response = await get_user(request.user_id)
-    if not user_response or "user" not in user_response:
+    user_data = extract_user_data(user_response)
+    
+    if not user_data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại")
-    email = user_response["user"].get("email")
+    
+    email = user_data.get("email")
     if not email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email không hợp lệ.")
-    otp_required = await send_email_otp(request.user_id, email)
+    
+    otp_required = await send_email_otp(request.user_id, email, request.otp_type)
     if not otp_required or otp_required.get("status") != "success":
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Không thể gửi mã OTP. Vui lòng thử lại sau.")
     return {
         "status": "success",
         "message": "Mã OTP đã được gửi lại đến email của bạn."
     }
+
+@router.post("/contact-admin", status_code=status.HTTP_200_OK, dependencies=[Depends(rate_limiters(redis_clients, "contact_admin"))])
+async def contact_admin(request: ContactAdminRequest):
+    """
+    Endpoint cho phép user bị chặn liên hệ admin qua email mà không cần đăng nhập.
+    Sử dụng khi user không thể đăng nhập do tài khoản bị vô hiệu hóa hoặc vi phạm.
+    """
+    if not ADMIN_EMAIL:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Cấu hình email admin chưa được thiết lập. Vui lòng liên hệ quản trị viên hệ thống."
+        )
+    
+    try:
+        # Gửi email đến admin
+        email_response = await send_contact_admin_email(
+            user_email=request.email,
+            username=request.username,
+            subject=request.subject,
+            message=request.message,
+            admin_email=ADMIN_EMAIL
+        )
+        
+        if not email_response or email_response.get("status") != "success":
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Không thể gửi email liên hệ admin. Vui lòng thử lại sau."
+            )
+        
+        return {
+            "status": "success",
+            "message": "Email liên hệ admin đã được gửi thành công. Chúng tôi sẽ phản hồi sớm nhất có thể."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi gửi email liên hệ admin: {str(e)}"
+        )

@@ -1,31 +1,76 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
   <head>
     <meta charset="utf-8" />
-    <title>Tài khoản bị tạm khóa</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="./fontawesome-free-6.5.1-web/css/all.css">
+    <title>Tài khoản bị tạm khóa - JarVis AI</title>
   </head>
-  <body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
+  <body style="margin:0;padding:0;background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);padding:40px 20px;">
       <tr>
         <td align="center">
-          <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 4px 8px rgba(0,0,0,0.05);">
+          <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.15);max-width:100%;">
+            <!-- Header with Gradient -->
             <tr>
-              <td style="background:#dc2626;color:#ffffff;text-align:center;padding:24px;font-size:24px;font-weight:bold;">
-                JarVis AI
+              <td style="background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);color:#ffffff;text-align:center;padding:40px 32px;">
+                <div style="font-size:32px;font-weight:bold;margin-bottom:8px;letter-spacing:-0.5px;">
+                  <i class="fa-solid fa-triangle-exclamation"></i> JarVis AI
+                </div>
+                <div style="font-size:14px;opacity:0.9;font-weight:300;">
+                  Cảnh báo vi phạm
+                </div>
               </td>
             </tr>
+            
+            <!-- Content -->
             <tr>
-              <td style="padding:32px;color:#333;">
-                <h2 style="margin-top:0;color:#dc2626;">Tài khoản bị tạm khóa</h2>
-                <p>Chào {{username}},</p>
-                <p>Tài khoản của bạn đã bị tạm khóa do vi phạm nội dung trong cuộc trò chuyện.</p>
-                <p>Thời gian khóa: <strong>{{duration}}</strong>.</p>
-                <p>Nếu bạn nghĩ đây là nhầm lẫn, hãy liên hệ quản trị viên để được hỗ trợ.</p>
+              <td style="padding:48px 40px;color:#1f2937;line-height:1.6;">
+                <h2 style="margin:0 0 24px 0;color:#d97706;font-size:28px;font-weight:700;line-height:1.2;">
+                  Tài khoản bị tạm khóa
+                </h2>
+                <p style="margin:0 0 16px 0;font-size:16px;color:#4b5563;">
+                  Chào <strong style="color:#111827;">{{username}}</strong>,
+                </p>
+                <p style="margin:0 0 24px 0;font-size:16px;color:#4b5563;">
+                  Chúng tôi thông báo rằng tài khoản của bạn đã bị tạm khóa do vi phạm nội dung trong cuộc trò chuyện hoặc vi phạm điều khoản sử dụng.
+                </p>
+                
+                <!-- Info Box -->
+                <div style="margin:24px 0;padding:20px;background:#fffbeb;border-left:4px solid #f59e0b;border-radius:8px;">
+                  <p style="margin:0 0 12px 0;font-size:15px;color:#92400e;font-weight:600;">
+                    <i class="fa-solid fa-info-circle"></i> Thông tin khóa tài khoản:
+                  </p>
+                  <ul style="margin:0;padding-left:20px;color:#78350f;font-size:14px;line-height:1.8;">
+                    <li><strong>Thời gian khóa:</strong> {{duration}}</li>
+                    <li>Tài khoản sẽ tự động mở khóa sau thời gian quy định</li>
+                    <li>Vui lòng tuân thủ điều khoản sử dụng để tránh bị khóa vĩnh viễn</li>
+                  </ul>
+                </div>
+                
+                <!-- Warning Box -->
+                <div style="margin:24px 0;padding:20px;background:#fee2e2;border-left:4px solid #ef4444;border-radius:8px;">
+                  <p style="margin:0;font-size:14px;color:#991b1b;">
+                    <strong><i class="fa-solid fa-triangle-exclamation"></i> Lưu ý:</strong> Nếu bạn nghĩ đây là nhầm lẫn hoặc cần hỗ trợ, hãy liên hệ quản trị viên để được giải quyết.
+                  </p>
+                </div>
+                
+                <!-- Help Text -->
+                <p style="margin:24px 0 0 0;font-size:14px;color:#6b7280;text-align:center;">
+                  Chúng tôi khuyến khích bạn đọc lại <strong>Điều khoản sử dụng</strong> và <strong>Chính sách cộng đồng</strong> để tránh các vi phạm trong tương lai.
+                </p>
               </td>
             </tr>
+            
+            <!-- Footer -->
             <tr>
-              <td style="background:#f3f4f6;text-align:center;padding:16px;font-size:12px;color:#888;">
-                © 2025 JarVis AI. Mọi quyền được bảo lưu.
+              <td style="background:linear-gradient(to right, #f9fafb, #f3f4f6);text-align:center;padding:32px 40px;border-top:1px solid #e5e7eb;">
+                <p style="margin:0 0 16px 0;font-size:14px;color:#6b7280;">
+                  <i class="fa-regular fa-copyright"></i> 2025 JarVis AI. Mọi quyền được bảo lưu.
+                </p>
+                <p style="margin:0;font-size:12px;color:#9ca3af;">
+                  Email này được gửi tự động, vui lòng không trả lời.
+                </p>
               </td>
             </tr>
           </table>

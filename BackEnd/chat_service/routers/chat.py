@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 from jose import JWTError
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session, joinedload
-from service.redis_client import redis_client
 from db_config import SessionLocal, db_dependency
 from schemas import ChatSessionUpdate, ChatSessionOut, ChatHistoryOut, AllChatUsersResponse, UserDetailOut, SessionWithMessageOut
 from starlette.websockets import WebSocketState
@@ -20,6 +19,7 @@ from models import ChatSession, ChatHistory
 from connect_service import get_current_user, validate_token_from_query, get_user
 from sockets.connection_manager import ConnectionManager
 from sockets.ws_helpers import handle_send_message, handle_typing, now_vn
+from service.prompts import SYSTEM_MESSAGE
 router = APIRouter(prefix="/api/chatbot_service",tags=["chatbot"])
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -46,7 +46,23 @@ async def get_all_chat_with_users(db: db_dependency, page: int=1, limit:int=10, 
     async def fetch_user(user_id):
         try:
             info = await get_user(user_id)
-            user_data = info.get("user") or {}
+            # Xử lý cả trường hợp response là dict trực tiếp hoặc có key "user"
+            if isinstance(info, dict):
+                if "user" in info:
+                    user_data = info["user"]
+                else:
+                    user_data = info
+            else:
+                if hasattr(info, 'model_dump'):
+                    user_data = info.model_dump()
+                elif hasattr(info, 'dict'):
+                    user_data = info.dict()
+                else:
+                    user_data = {}
+            
+            if not isinstance(user_data, dict):
+                user_data = {}
+            
             return {
                 "user_id": user_id,
                 "username": user_data.get("username"),
@@ -99,7 +115,24 @@ async def get_chat_of_user_id(db: db_dependency, user_id: int,user=Depends(get_c
     user_response = await get_user(user_id)
     if not user_response:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại.")
-    user_data = user_response.get("user")
+    
+    # Xử lý cả trường hợp response là dict trực tiếp hoặc có key "user"
+    if isinstance(user_response, dict):
+        if "user" in user_response:
+            user_data = user_response["user"]
+        else:
+            user_data = user_response
+    else:
+        if hasattr(user_response, 'model_dump'):
+            user_data = user_response.model_dump()
+        elif hasattr(user_response, 'dict'):
+            user_data = user_response.dict()
+        else:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại.")
+    
+    if not isinstance(user_data, dict):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại.")
+    
     # Lấy tất cả session của user + load luôn messages
     sessions = (
         db.query(ChatSession)
@@ -209,7 +242,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: uuid.UUID):
     db: Session = SessionLocal()
     user_id: Optional[int] = None
     try:
-        # 1. Auth
+        # Xác thực
         try:
             user_data = await validate_token_from_query(websocket)
             if not user_data:
@@ -217,89 +250,77 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: uuid.UUID):
                 return
             user_id = int(user_data.get("user_id") or user_data.get("sub"))
         except JWTError:
-            logger.warning("Xác thực JWT cho WebSocket thất bại")
             await websocket.close(code=1008)
             return
-
-        # 2. Kiểm tra quyền sở hữu phiên trò chuyện (chat_session)
+        # Kiểm tra quyền sở hữu
         chat_session = db.query(ChatSession).filter(
-            ChatSession.id == chat_id,
-            ChatSession.user_id == user_id,
+            ChatSession.id == chat_id, ChatSession.user_id == user_id
         ).first()
         if not chat_session:
-            logger.warning(f"Truy cập WebSocket không được phép: user {user_id} -> chat {chat_id}")
             await websocket.close(code=1008)
             return
-
-        # 3. Chấp nhận và kết nối
+        # Kết nối
         await websocket.accept()
         await manager.connect(websocket, chat_id, user_id)
         logger.info(f"User {user_id} connected to chat {chat_id}")
-
-        # 4. Tải lịch sử trò chuyện giới hạn (chỉ lấy N tin nhắn gần nhất để tiết kiệm token)
-        N_CONTEXT = 40
-        chat_log: List[Dict[str, Any]] = [{"role": "system", "content": "Bạn là một trợ lý hữu ích, phản hồi rõ ràng và súc tích."}]
-        messages = (
-            db.query(ChatHistory)
-            .filter(ChatHistory.chat_id == chat_id)
-            .order_by(ChatHistory.created_at.desc())
-            .limit(N_CONTEXT)
-            .all()
-        )
-        for m in reversed(messages):
-            chat_log.append({"role": m.role, "content": m.content})
-
-        # 5. Vòng lặp chính
+        # Vòng lặp nhận dữ liệu
         while websocket.client_state == WebSocketState.CONNECTED:
             try:
                 data = await websocket.receive_json()
             except WebSocketDisconnect:
-                logger.info(f"WebSocket bị ngắt kết nối bởi client: user {user_id}, chat {chat_id}")
                 break
             except Exception as e:
-                # Không đóng socket vì một JSON không hợp lệ; tiếp tục lắng nghe
-                logger.exception("Lỗi khi nhận dữ liệu JSON từ WebSocket: %s", e)
+                logger.warning(f"Lỗi nhận dữ liệu WS: {e}")
                 continue
-
             action = data.get("action")
             content = data.get("content")
-
+            # Trạng thái typing
             if action == "typing":
                 await handle_typing(manager, chat_id, user_id)
                 continue
-
+            # Gửi tin nhắn bình thường
             if action != "sendMessage" or not content:
-                # Bỏ qua các hành động không xác định
                 continue
-
-            # Giao toàn bộ quy trình gửi tin nhắn cho hàm hỗ trợ (helper)
+            # Tạo context từ lịch sử
+            chat_log: List[Dict[str, Any]] = [
+                {"role": "system", "content": SYSTEM_MESSAGE}
+            ]
+            try:
+                messages = (
+                    db.query(ChatHistory)
+                    .filter(ChatHistory.chat_id == chat_id)
+                    .order_by(ChatHistory.created_at.desc())
+                    .limit(40)
+                    .all()
+                )
+                for m in reversed(messages):
+                    chat_log.append({"role": m.role, "content": m.content})
+            except Exception as e:
+                logger.error(f"Lỗi khi tải lịch sử chat {chat_id}: {e}")
+                await websocket.send_json({
+                    "role": "system",
+                    "content": "Không thể tải lịch sử trò chuyện.",
+                    "timestamp": now_vn().isoformat()
+                })
+                continue
+            # Gọi AI xử lý (stream qua websocket)
             await handle_send_message(
-                websocket=websocket,
-                db=db,
-                chat_id=chat_id,
-                chat_log=chat_log,
-                chat_session=chat_session,
-                user_id=user_id,
-                user_input=content,
-                user_data=user_data,
+                websocket, db, chat_id, chat_log, chat_session, user_id, content, user_data
             )
-
     except Exception as e:
         logger.exception("Fatal websocket error: %s", e)
         if websocket.client_state == WebSocketState.CONNECTED:
-            with contextlib.suppress(Exception):
-                await websocket.send_json({
-                    "role": "system",
-                    "content": "Đã xảy ra lỗi. Vui lòng thử lại.",
-                    "timestamp": now_vn().isoformat(),
-                })
+            await websocket.send_json({
+                "role": "system",
+                "content": "Đã xảy ra lỗi. Vui lòng thử lại.",
+                "timestamp": now_vn().isoformat(),
+            })
     finally:
         with contextlib.suppress(Exception):
             if websocket.client_state == WebSocketState.CONNECTED:
                 await websocket.close()
-        # đảm bảo disconnect khỏi manager
         with contextlib.suppress(Exception):
             if user_id is not None:
                 await manager.disconnect(websocket, chat_id, user_id)
         db.close()
-        logger.info(f"Đã đóng kết nối WebSocket cho người dùng {user_id} chat {chat_id}")
+        logger.info(f"WebSocket closed for user {user_id} chat {chat_id}")

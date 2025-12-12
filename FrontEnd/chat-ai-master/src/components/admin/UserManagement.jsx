@@ -1,5 +1,5 @@
 // src/pages/admin/UserManagement.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   Plus,
   Pencil,
@@ -9,9 +9,11 @@ import {
   EyeOff,
   Eye,
   Download,
+  Mail,
 } from "lucide-react";
 import useAdminUserApi from "@/hooks/admin/useAdminUserAPI";
 import dayjs from "dayjs";
+import SendEmailModal from "../SendEmailModal";
 
 /** -------------------------------------------------------------------------
  * Trang quản lý User (Admin)
@@ -37,6 +39,7 @@ export default function UserManagement() {
   const [search, setSearch] = useState("");
   const [activeCount, setActiveCount] = useState(0);
   const [form, setForm] = useState({ open: false, mode: "create", data: null });
+  const [emailModal, setEmailModal] = useState({ open: false, user: null });
 
   /* ---------------------------------------------------------------------- */
   /* Fetch users + active count                                             */
@@ -57,14 +60,19 @@ export default function UserManagement() {
   const fetchActiveCount = async () => {
     try {
       const actives = await getListActiveUser();
-      console.log("Active users:", actives.length);
       setActiveCount(actives.length);
     } catch {
       setActiveCount(0);
     }
   };
 
+  const hasFetchedRef = useRef(false);
+  
   useEffect(() => {
+    // Chỉ fetch một lần khi component mount
+    if (hasFetchedRef.current) return;
+    
+    hasFetchedRef.current = true;
     fetchUsers();
     fetchActiveCount();
   }, []);
@@ -214,6 +222,18 @@ export default function UserManagement() {
                   <td className="pr-4 space-x-2 text-right">
                     <button
                       onClick={() =>
+                        setEmailModal({
+                          open: true,
+                          user: u,
+                        })
+                      }
+                      className="text-green-600 hover:underline"
+                      title="Gửi email"
+                    >
+                      <Mail size={16} />
+                    </button>
+                    <button
+                      onClick={() =>
                         setForm({
                           open: true,
                           mode: "edit",
@@ -221,18 +241,21 @@ export default function UserManagement() {
                         })
                       }
                       className="text-blue-600 hover:underline"
+                      title="Chỉnh sửa"
                     >
                       <Pencil size={16} />
                     </button>
                     <button
                       onClick={() => handleDelete(u.id)}
                       className="text-red-600 hover:underline"
+                      title="Xóa"
                     >
                       <Trash2 size={16} />
                     </button>
                     <button
                       onClick={() => handleToggleActive(u.id)}
                       className="text-amber-600 hover:underline"
+                      title={u.status === "Active" ? "Vô hiệu hóa" : "Kích hoạt"}
                     >
                       {u.status === "Active" ? (
                         <EyeOff size={16} />
@@ -334,6 +357,18 @@ export default function UserManagement() {
           </div>
         </div>
       )}
+
+      {/* Email Modal */}
+      <SendEmailModal
+        open={emailModal.open}
+        onClose={() => setEmailModal({ open: false, user: null })}
+        recipientEmail={emailModal.user?.email || ""}
+        recipientName={
+          emailModal.user
+            ? `${emailModal.user.first_name} ${emailModal.user.last_name}`
+            : ""
+        }
+      />
     </div>
   );
 }

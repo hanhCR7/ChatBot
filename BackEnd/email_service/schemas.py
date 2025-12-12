@@ -33,3 +33,13 @@ class ViolationLockEmailRequest(BaseModel):
     recipient: EmailStr
     username: str
     ban_duration: str
+
+class ResendActivationEmailRequest(BaseModel):
+    email: EmailStr
+
+class ContactAdminRequest(BaseModel):
+    user_email: EmailStr
+    username: str
+    subject: str
+    message: str
+    admin_email: EmailStr

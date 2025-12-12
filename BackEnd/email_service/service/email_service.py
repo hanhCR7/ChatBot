@@ -65,4 +65,3 @@ async def send_email(db: Session, recipient: str, subject: str, body: str):
     if status != "Success":
         raise Exception(status)  # raise lỗi để tầng gọi xử lý đúng
     return True
-

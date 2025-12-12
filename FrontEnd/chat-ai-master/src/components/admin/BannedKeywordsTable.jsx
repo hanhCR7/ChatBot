@@ -9,7 +9,7 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/table";
-import useBannedKeywordsApi from "@/hooks/admin/banedKeywordsApi";
+import useBannedKeywordsApi from "@/hooks/admin/bannedKeywordsApi";
 
 export default function BannedKeywordsTable() {
   const { getAllBannedKeywords, addBannedKeyword, deleteBannedKeyword } =

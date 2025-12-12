@@ -40,3 +40,24 @@ async def get_user_by_email(email: str):
         else:
             # Lỗi khác từ user service
             raise HTTPException(status_code=500, detail=f"Lỗi từ user service: {response.text}")
+
+async def generate_activation_token_for_user(user_id: int):
+    """Gọi user service để tạo activation token mới"""
+    headers = {"X-API-Key": SERVICE_KEY}
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                f'{USER_SERVICE_URL}generate-activation-token',
+                json={"user_id": user_id},
+                headers=headers
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("activation_token")
+            else:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Không thể tạo activation token: {response.text}"
+                )
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=500, detail=f"Lỗi khi tạo activation token: {repr(e)}")

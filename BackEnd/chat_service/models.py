@@ -22,7 +22,7 @@ class ChatHistory(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     chat_session = relationship("ChatSession", back_populates="chat_history")
 
-class BanedKeywords(Base):
+class BannedKeywords(Base):
     __tablename__ = 'baned_keywords'
     id = Column(Integer, primary_key=True, index=True)
     keyword = Column(String, unique=True, nullable=False)

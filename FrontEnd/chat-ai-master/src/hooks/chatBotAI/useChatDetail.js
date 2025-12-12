@@ -7,38 +7,35 @@ import {
 } from "../../store/chatSlice";
 import { useChatApi } from "./useChatAPI";
 import { useChatSocket } from "./useChatSocket";
+
 export const useChatDetail = (chatId) => {
   const dispatch = useDispatch();
   const { getChats, getChatById } = useChatApi();
+
   const [token, setToken] = useState(null);
   const [messages, setMessages] = useState([]);
   const [partialResponse, setPartialResponse] = useState("");
   const [violations, setViolations] = useState([]);
-  const isMountedRef = useRef(true);
-  // --- Ref giữ chat state để tránh useSelector trong callback ---
-  const chatStateRef = useRef([]);
+  const pendingMessagesRef = useRef(new Set()); // Track messages being sent
+
+  // --- lấy chat từ Redux ---
   const chatData = useSelector((s) => s.chat.data);
-  useEffect(() => {
-    chatStateRef.current = chatData;
-  }, [chatData]);
-  // --- Lấy token 1 lần ---
+
+  // --- token từ localStorage ---
   useEffect(() => {
     const t = localStorage.getItem("access_token");
     if (t) setToken(t);
   }, []);
-  // --- Cleanup ---
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-  // --- Reset khi đổi chatId ---
+
+  // --- reset khi đổi chat ---
   useEffect(() => {
     setMessages([]);
     setPartialResponse("");
     setViolations([]);
+    pendingMessagesRef.current.clear(); // Clear pending messages when switching chats
   }, [chatId]);
-  // --- Load dữ liệu chat ---
+
+  // --- load chat cũ từ API ---
   useEffect(() => {
     let isMounted = true;
     const fetchData = async () => {
@@ -49,173 +46,232 @@ export const useChatDetail = (chatId) => {
           if (isMounted) setMessages([]);
           return;
         }
-        const mapped = res.messages.map((msg) => ({
-          id: msg.id || crypto.randomUUID(),
-          text: msg.content || "",
-          isBot: msg.role === "assistant",
-          timestamp: msg.created_at
-            ? new Date(msg.created_at).getTime()
-            : Date.now(),
-          role: msg.role,
-        }));
+
+        // Map messages
+        const mapped = res.messages.map((msg) => {
+          const content = msg.content || "";
+          
+          return {
+            id: msg.id || crypto.randomUUID(),
+            text: content,
+            isBot: msg.role === "assistant",
+            timestamp: msg.created_at
+              ? new Date(msg.created_at).getTime()
+              : Date.now(),
+            role: msg.role,
+          };
+        });
+
         if (isMounted) {
           setMessages(mapped);
           dispatch(updateMessagesInChat({ chatId, messages: mapped }));
         }
-      } catch (error) {
-        if (isMounted) {
-          console.error("Lỗi tải chat:", error);
-          setMessages([]);
-        }
+      } catch (err) {
+        console.error("Lỗi tải chat:", err);
+        if (isMounted) setMessages([]);
       }
     };
+
     if (chatId) fetchData();
-    return () => {
-      isMounted = false;
-    };
+    return () => (isMounted = false);
   }, [chatId, dispatch, getChats, getChatById]);
-  // --- onMessage từ WebSocket ---
+
+  // --- xử lý tin nhắn từ WebSocket ---
   const onMessage = useCallback(
     (data) => {
       let parsed = data;
-      if (typeof data === "string") {
-        try {
-          parsed = JSON.parse(data);
-        } catch {
-          if (
-            data.includes("Cảnh báo") ||
-            data.includes("cấm chat") ||
-            data.includes("Tài khoản của bạn đã bị khóa")
-          ) {
-            const violationObj = {
-              type: "violation",
-              role: "system",
-              message: data,
-              level: data.includes("5 phút")
-                ? 2
-                : data.includes("1 giờ")
-                ? 3
-                : data.includes("1 ngày")
-                ? 4
-                : 1,
-              ban_time: data.includes("5 phút")
-                ? 300
-                : data.includes("1 giờ")
-                ? 3600
-                : data.includes("1 ngày")
-                ? 86400
-                : 0,
-              timestamp: Date.now(),
-            };
-            setViolations((prev) => [...prev, violationObj]);
-          }
-          return;
-        }
+      try {
+        if (typeof data === "string") parsed = JSON.parse(data);
+      } catch {
+        if (typeof data === "string" && data.includes("Cảnh báo")) {
+          parsed = { type: "violation", role: "system", message: data };
+        } else return;
       }
-      if (parsed.type === "violation") {
-        setViolations((prev) => [...prev, parsed]);
-        return;
-      }
-      const role = parsed.role || parsed.payload?.role;
-      const content = parsed.content || parsed.payload?.content || "";
-      const timestamp = parsed.timestamp || Date.now();
-      if (!content) return;
-      if (role === "assistant") {
-        const fullMessage = content.trim();
-        if (fullMessage) {
-          dispatch(
-            addMessage({
-              idChat: chatId,
-              userMess: null,
-              botMess: fullMessage,
-              timestamp,
-            })
-          );
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              text: fullMessage,
-              isBot: true,
-              role: "assistant",
-              timestamp,
-            },
-          ]);
-        }
-        setPartialResponse("");
-      } else if (role === "user") {
-        setMessages((prev) => {
-          const isDuplicate = prev.some(
-            (m) => m.text === content && m.role === "user"
-          );
-          if (isDuplicate) return prev;
-          dispatch(
-            addMessage({
-              idChat: chatId,
-              userMess: content,
-              botMess: null,
-              timestamp,
-            })
-          );
-          return [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              text: content,
-              isBot: false,
-              role: "user",
-              timestamp,
-            },
-          ];
-        });
-      } else if (role === "system") {
-        if (
-          content.includes("Cảnh báo") ||
-          content.includes("cấm chat") ||
-          content.includes("Tài khoản của bạn đã bị khóa")
-        ) {
+
+      const {
+        role,
+        content,
+        timestamp: isoTimestamp,
+        streaming,
+        event,
+        title,
+        type,
+        file_url,
+        file,
+        message,
+      } = parsed;
+
+      // --- Vi phạm / cảnh báo / ban message ---
+      if (
+        type === "violation" ||
+        (role === "system" && (content || message)?.includes("Cảnh báo")) ||
+        (role === "system" && (content || message)?.includes("bị cấm chat"))
+      ) {
+        console.log("🚨 [useChatDetail] Nhận được violation/ban từ server:", parsed);
+        const msgText = message || content;
+        
+        // Xử lý message ban (khi user đang bị ban)
+        if (msgText?.includes("bị cấm chat")) {
           const violationObj = {
+            id: `violation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             type: "violation",
             role: "system",
-            message: content,
-            level: content.includes("5 phút")
-              ? 2
-              : content.includes("1 giờ")
-              ? 3
-              : content.includes("1 ngày")
-              ? 4
-              : 1,
-            ban_time: content.includes("5 phút")
-              ? 300
-              : content.includes("1 giờ")
-              ? 3600
-              : content.includes("1 ngày")
-              ? 86400
-              : 0,
-            timestamp,
+            message: msgText,
+            level: 1, // Ban message không có level cụ thể, mặc định level 1
+            ban_time: 0, // Đã bị ban rồi nên không có ban_time mới
+            timestamp: isoTimestamp
+              ? new Date(isoTimestamp).getTime()
+              : Date.now(),
           };
-          setViolations((prev) => [...prev, violationObj]);
+          
+          console.log("✅ [useChatDetail] Tạo violation object từ ban message:", violationObj);
+          setViolations((prev) => {
+            const updated = [...prev, violationObj];
+            console.log("📋 [useChatDetail] Violations state updated:", updated);
+            return updated;
+          });
+          return;
         }
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            text: content,
-            isBot: false,
-            role: "system",
-            timestamp,
-          },
-        ]);
+        
+        // Xử lý violation message thông thường
+        // Backend đã gửi level và ban_time trong payload, sử dụng chúng thay vì parse từ text
+        // Nếu không có (fallback cho legacy messages), parse từ text
+        let violationLevel = parsed.level;
+        let violationBanTime = parsed.ban_time;
+        
+        console.log("📊 [useChatDetail] Violation level từ server:", violationLevel, "ban_time:", violationBanTime);
+        
+        if (violationLevel === undefined || violationBanTime === undefined) {
+          // Fallback: parse từ message text (cho backward compatibility)
+          violationLevel = msgText.includes("5 phút")
+            ? 2
+            : msgText.includes("1 giờ")
+            ? 3
+            : msgText.includes("1 ngày")
+            ? 4
+            : 1;
+          violationBanTime = msgText.includes("5 phút")
+            ? 300
+            : msgText.includes("1 giờ")
+            ? 3600
+            : msgText.includes("1 ngày")
+            ? 86400
+            : 0;
+          console.log("⚠️ [useChatDetail] Parse từ text - level:", violationLevel, "ban_time:", violationBanTime);
+        }
+        
+        const violationObj = {
+          id: `violation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: "violation",
+          role: "system",
+          message: msgText,
+          level: violationLevel,
+          ban_time: violationBanTime,
+          timestamp: isoTimestamp
+            ? new Date(isoTimestamp).getTime()
+            : Date.now(),
+        };
+        
+        console.log("✅ [useChatDetail] Tạo violation object:", violationObj);
+        setViolations((prev) => {
+          const updated = [...prev, violationObj];
+          console.log("📋 [useChatDetail] Violations state updated:", updated);
+          return updated;
+        });
+        return;
+      }
+
+      // --- sự kiện hệ thống (đổi tiêu đề) ---
+      if (role === "system") {
+        if (event === "TITLE_UPDATED" && title) {
+          dispatch(setNameChat({ chatId, newTitle: title }));
+        }
+        return;
+      }
+
+      // --- tin nhắn từ trợ lý ---
+      if (role === "assistant") {
+        if (streaming) {
+          setPartialResponse((prev) => prev + (content || ""));
+          return;
+        }
+
+        const finalMessage = {
+          id: crypto.randomUUID(),
+          text: content,
+          isBot: true,
+          role: "assistant",
+          timestamp: isoTimestamp
+            ? new Date(isoTimestamp).getTime()
+            : Date.now(),
+        };
+
+        setPartialResponse("");
+        setMessages((prev) => [...prev, finalMessage]);
+        dispatch(
+          addMessage({
+            idChat: chatId,
+            userMess: null,
+            botMess: content,
+            timestamp: finalMessage.timestamp,
+          })
+        );
+        return;
+      }
+
+
+      // --- tin nhắn người dùng (text) ---
+      if (role === "user") {
+        const messageKey = `user-${content}`;
+        
+        // Kiểm tra xem tin nhắn này đã được thêm vào pending chưa
+        if (pendingMessagesRef.current.has(messageKey)) {
+          // Đã có trong pending, chỉ cần remove khỏi pending và không thêm lại
+          pendingMessagesRef.current.delete(messageKey);
+          return;
+        }
+
+        const newMessage = {
+          id: crypto.randomUUID(),
+          text: content,
+          isBot: false,
+          role: "user",
+          type: "text",
+          timestamp: isoTimestamp
+            ? new Date(isoTimestamp).getTime()
+            : Date.now(),
+        };
+
+        setMessages((prev) => {
+          // Kiểm tra duplicate dựa trên text và role trong vòng 5 giây
+          const isDuplicate = prev.some(
+            (m) =>
+              m.text === content &&
+              m.role === "user" &&
+              Math.abs(m.timestamp - newMessage.timestamp) < 5000
+          );
+          if (isDuplicate) return prev;
+          return [...prev, newMessage];
+        });
+
+        dispatch(
+          addMessage({
+            idChat: chatId,
+            userMess: content,
+            botMess: null,
+            timestamp: newMessage.timestamp,
+          })
+        );
       }
     },
     [dispatch, chatId]
   );
+
+  // --- khi bot đang stream ---
   const onPartialBuffer = useCallback((buffer) => {
     setPartialResponse(buffer);
   }, []);
-  const shouldConnect = Boolean(
-    token && chatId && typeof onMessage === "function"
-  );
+
   const onUpdateTitle = useCallback(
     (newTitle) => {
       dispatch(
@@ -228,6 +284,11 @@ export const useChatDetail = (chatId) => {
     },
     [dispatch, chatId]
   );
+
+
+  // --- kết nối WebSocket ---
+  const shouldConnect = Boolean(token && chatId);
+
   const socketData = useChatSocket(
     chatId,
     token,
@@ -236,12 +297,25 @@ export const useChatDetail = (chatId) => {
     onPartialBuffer,
     onUpdateTitle
   );
+
+  // --- gửi tin nhắn ---
   const sendMessage = useCallback(
     (text) => {
       if (!socketData.connected) return false;
+
       const sent = socketData.sendMessage(text);
       if (sent) {
         const timestamp = Date.now();
+        const messageKey = `user-${text}`;
+        
+        // Đánh dấu tin nhắn này đang pending
+        pendingMessagesRef.current.add(messageKey);
+        
+        // Tự động xóa khỏi pending sau 10 giây để tránh memory leak
+        setTimeout(() => {
+          pendingMessagesRef.current.delete(messageKey);
+        }, 10000);
+
         dispatch(
           addMessage({
             idChat: chatId,
@@ -250,11 +324,35 @@ export const useChatDetail = (chatId) => {
             timestamp,
           })
         );
+        
+        setMessages((prev) => {
+          // Kiểm tra duplicate trước khi thêm
+          const isDuplicate = prev.some(
+            (m) =>
+              m.text === text &&
+              m.role === "user" &&
+              Math.abs(m.timestamp - timestamp) < 1000
+          );
+          if (isDuplicate) return prev;
+          
+          return [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              text,
+              isBot: false,
+              role: "user",
+              timestamp,
+            },
+          ];
+        });
       }
+
       return sent;
     },
     [socketData, dispatch, chatId]
   );
+
   return {
     messages,
     setMessages,
@@ -266,4 +364,5 @@ export const useChatDetail = (chatId) => {
     violations,
   };
 };
+
 export default useChatDetail;

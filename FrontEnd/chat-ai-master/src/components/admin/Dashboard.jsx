@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   PieChart,
   Pie,
@@ -10,7 +10,10 @@ import {
   XAxis,
   YAxis,
   LabelList,
+  Legend,
 } from "recharts";
+import { motion } from "framer-motion";
+import { Users, UserCheck, UserX, TrendingUp, Calendar } from "lucide-react";
 import useAdminUserApi from "@/hooks/admin/useAdminUserAPI";
 import dayjs from "dayjs";
 
@@ -20,25 +23,42 @@ const Dashboard = () => {
   const { getAllUser } = useAdminUserApi();
   const [users, setUsers] = useState(null);
   const [error, setError] = useState(null);
+  const hasFetchedRef = useRef(false);
+  const getAllUserRef = useRef(getAllUser);
+
+  // Cập nhật ref khi function thay đổi
+  useEffect(() => {
+    getAllUserRef.current = getAllUser;
+  }, [getAllUser]);
 
   useEffect(() => {
-    (async () => {
+    // Chỉ fetch một lần khi component mount
+    if (hasFetchedRef.current) return;
+    
+    const fetchUsers = async () => {
       try {
-        const res = await getAllUser();
-        console.log("Full API response:", res);
-        setUsers(res || []); // nhớ lấy đúng mảng users
+        hasFetchedRef.current = true;
+        const res = await getAllUserRef.current();
+        setUsers(res || []);
       } catch (err) {
         setError("Không thể tải dữ liệu người dùng.");
+        hasFetchedRef.current = false; // Reset để có thể retry
       }
-    })();
-  }, []);
+    };
+    
+    fetchUsers();
+  }, []); // Empty deps - chỉ chạy một lần
 
   if (error) return <p className="p-4 text-red-500">{error}</p>;
   if (!users) return <p className="p-4">Đang tải dữ liệu...</p>;
 
   // Tính số active/inactive
-  const statusLower = (u) => (u.status ?? "").toLowerCase();
-  console.log("User list:", users);
+  const statusLower = (u) => {
+    if (!u.status) return "";
+    // Xử lý cả trường hợp status là string hoặc object Enum
+    const statusValue = typeof u.status === "string" ? u.status : (u.status.value || u.status);
+    return String(statusValue).toLowerCase();
+  };
   const active = users.filter((u) => statusLower(u) === "active").length;
   const inactive = users.length - active;
 
@@ -59,23 +79,116 @@ const Dashboard = () => {
     dayjs(u.created_at).isAfter(today.subtract(7, "day"))
   ).length;
 
-  return (
-    <div className="p-4 space-y-6">
-      <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+      },
+    },
+  };
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Widget tổng quan */}
-        <div className="bg-white dark:bg-gray-800 p-4 rounded shadow flex flex-col justify-center items-center">
-          <h2 className="text-lg font-semibold mb-2">Users new last 7 days</h2>
-          <p className="text-4xl font-bold text-emerald-600 dark:text-emerald-400">
-            {newLast7Days}
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 },
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center justify-between"
+      >
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Dashboard
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Tổng quan hệ thống và thống kê người dùng
           </p>
         </div>
+      </motion.div>
 
+      {/* Stats Cards */}
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+      >
+        <motion.div
+          variants={itemVariants}
+          className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg shadow-blue-500/30"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+              <Users className="w-6 h-6" />
+            </div>
+          </div>
+          <p className="text-blue-100 text-sm font-medium mb-1">Total Users</p>
+          <p className="text-3xl font-bold">{users.length}</p>
+        </motion.div>
+
+        <motion.div
+          variants={itemVariants}
+          className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-6 text-white shadow-lg shadow-emerald-500/30"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+              <UserCheck className="w-6 h-6" />
+            </div>
+          </div>
+          <p className="text-emerald-100 text-sm font-medium mb-1">Active Users</p>
+          <p className="text-3xl font-bold">{active}</p>
+        </motion.div>
+
+        <motion.div
+          variants={itemVariants}
+          className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl p-6 text-white shadow-lg shadow-red-500/30"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+              <UserX className="w-6 h-6" />
+            </div>
+          </div>
+          <p className="text-red-100 text-sm font-medium mb-1">Inactive Users</p>
+          <p className="text-3xl font-bold">{inactive}</p>
+        </motion.div>
+
+        <motion.div
+          variants={itemVariants}
+          className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg shadow-purple-500/30"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+              <TrendingUp className="w-6 h-6" />
+            </div>
+          </div>
+          <p className="text-purple-100 text-sm font-medium mb-1">New (7 days)</p>
+          <p className="text-3xl font-bold">{newLast7Days}</p>
+        </motion.div>
+      </motion.div>
+
+      {/* Charts */}
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+      >
         {/* Biểu đồ donut */}
-        <div className="bg-white dark:bg-gray-800 p-4 rounded shadow">
-          <h2 className="text-lg font-semibold mb-2">User Status Ratio</h2>
-          <ResponsiveContainer width="100%" height={220}>
+        <motion.div
+          variants={itemVariants}
+          className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl p-6 shadow-xl border border-gray-200/50 dark:border-gray-700/50"
+        >
+          <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-white flex items-center gap-2">
+            <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-purple-600 rounded-full"></div>
+            User Status Ratio
+          </h2>
+          <ResponsiveContainer width="100%" height={280}>
             <PieChart>
               <Pie
                 data={pieData}
@@ -83,8 +196,8 @@ const Dashboard = () => {
                 nameKey="name"
                 cx="50%"
                 cy="50%"
-                innerRadius={60}
-                outerRadius={80}
+                innerRadius={70}
+                outerRadius={100}
                 fill="#8884d8"
                 label={({ name, percent }) =>
                   `${name}: ${(percent * 100).toFixed(0)}%`
@@ -98,67 +211,91 @@ const Dashboard = () => {
                 ))}
               </Pie>
               <Tooltip />
+              <Legend />
             </PieChart>
           </ResponsiveContainer>
-        </div>
+        </motion.div>
 
-        {/* Biểu đồ cột user overview */}
-        <div className="bg-white dark:bg-gray-800 p-4 rounded shadow">
-          <h2 className="text-lg font-semibold mb-2">User Overview</h2>
-          <ResponsiveContainer width="100%" height={220}>
+        {/* Biểu đồ cột */}
+        <motion.div
+          variants={itemVariants}
+          className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl p-6 shadow-xl border border-gray-200/50 dark:border-gray-700/50"
+        >
+          <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-white flex items-center gap-2">
+            <div className="w-1 h-6 bg-gradient-to-b from-emerald-500 to-teal-600 rounded-full"></div>
+            User Overview
+          </h2>
+          <ResponsiveContainer width="100%" height={280}>
             <BarChart data={pieData}>
               <XAxis dataKey="name" />
               <YAxis allowDecimals={false} />
               <Tooltip />
-              <Bar dataKey="value" fill="#10A37F" radius={[4, 4, 0, 0]}>
+              <Bar dataKey="value" fill="url(#colorGradient)" radius={[8, 8, 0, 0]}>
                 <LabelList dataKey="value" position="top" />
               </Bar>
+              <defs>
+                <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10A37F" />
+                  <stop offset="100%" stopColor="#059669" />
+                </linearGradient>
+              </defs>
             </BarChart>
           </ResponsiveContainer>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Bảng 5 người dùng mới */}
-      <div className="bg-white dark:bg-gray-800 p-4 rounded shadow">
-        <h2 className="text-lg font-semibold mb-2">5 Newest Users</h2>
-        <table className="w-full text-left table-auto border-collapse">
-          <thead>
-            <tr className="border-b border-gray-300 dark:border-gray-700">
-              <th className="p-2">Name</th>
-              <th className="p-2">Email</th>
-              <th className="p-2">Status</th>
-              <th className="p-2">Created At</th>
-            </tr>
-          </thead>
-          <tbody>
-            {latestUsers.map((user) => (
-              <tr
-                key={user.id}
-                className="border-b border-gray-200 dark:border-gray-700"
-              >
-                <td className="p-2">
-                  {user.first_name} {user.last_name}
-                </td>
-                <td className="p-2">{user.email}</td>
-                <td className="p-2">
-                  <span
-                    className={`px-2 py-1 rounded text-xs ${
-                      (user.status || "").toLowerCase() === "active"
-                        ? "bg-green-200 text-green-800"
-                        : "bg-red-200 text-red-800"
-                    }`}
-                  >
-                    {user.status}
-                  </span>
-                </td>
-                <td className="p-2">
-                  {dayjs(user.created_at).format("DD/MM/YYYY")}
-                </td>
+      <motion.div
+        variants={itemVariants}
+        className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl p-6 shadow-xl border border-gray-200/50 dark:border-gray-700/50"
+      >
+        <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-white flex items-center gap-2">
+          <Calendar className="w-5 h-5 text-blue-500" />
+          5 Newest Users
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-700">
+                <th className="p-3 text-sm font-semibold text-gray-600 dark:text-gray-400">Name</th>
+                <th className="p-3 text-sm font-semibold text-gray-600 dark:text-gray-400">Email</th>
+                <th className="p-3 text-sm font-semibold text-gray-600 dark:text-gray-400">Status</th>
+                <th className="p-3 text-sm font-semibold text-gray-600 dark:text-gray-400">Created At</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {latestUsers.map((user, index) => (
+                <motion.tr
+                  key={user.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                >
+                  <td className="p-3 font-medium text-gray-900 dark:text-white">
+                    {user.first_name} {user.last_name}
+                  </td>
+                  <td className="p-3 text-gray-600 dark:text-gray-400">{user.email}</td>
+                  <td className="p-3">
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        statusLower(user) === "active"
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+                          : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                      }`}
+                    >
+                      {typeof user.status === "string" ? user.status : (user.status?.value || user.status || "N/A")}
+                    </span>
+                  </td>
+                  <td className="p-3 text-gray-600 dark:text-gray-400">
+                    {dayjs(user.created_at).format("DD/MM/YYYY")}
+                  </td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </motion.div>
     </div>
   );
 };

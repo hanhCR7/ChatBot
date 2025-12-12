@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+import logging
 from sqlalchemy import select
 from service.redis_client import redis_client
 from datetime import timezone, timedelta, datetime
@@ -7,15 +8,37 @@ from fastapi import  WebSocket
 from db_config import db_dependency
 from models import ViolationLog, ViolationStrike
 from schemas import ViolationStrikeCreate
-from connect_service import send_violation_lock_email
+from connect_service import send_violation_lock_email, get_user
 from service.cache import load_keywords_from_cache
 from sockets.connection_manager import ConnectionManager
+
+logger = logging.getLogger(__name__)
 
 manager = ConnectionManager()
 VN_TIMEZONE = timezone(timedelta(hours=7))
 async def contains_violation(message: str) -> bool:
+    """
+    Kiểm tra xem message có chứa từ khóa bị cấm không.
+    Sử dụng word boundary để tránh false positive (ví dụ: "class" không chứa "ass").
+    """
+    import re
     BANNED_KEYWORDS = await load_keywords_from_cache()
-    return any(word in message.lower() for word in BANNED_KEYWORDS)
+    logger.info(f"📋 Loaded banned keywords: {BANNED_KEYWORDS}")
+    if not BANNED_KEYWORDS:
+        logger.warning("⚠️ Không có từ khóa bị cấm nào trong database")
+        return False
+    
+    message_lower = message.lower()
+    logger.info(f"🔍 Kiểm tra message: '{message_lower}' với {len(BANNED_KEYWORDS)} từ khóa bị cấm")
+    # Kiểm tra từng keyword với word boundary để tránh false positive
+    for keyword in BANNED_KEYWORDS:
+        # Sử dụng regex với word boundary để match chính xác từ
+        pattern = r'\b' + re.escape(keyword.lower()) + r'\b'
+        if re.search(pattern, message_lower):
+            logger.info(f"✅ Phát hiện từ khóa bị cấm: '{keyword}' trong message: '{message}'")
+            return True
+    logger.info(f"❌ Không phát hiện từ khóa bị cấm trong message: '{message}'")
+    return False
 
 async def log_violation_to_db(user_id: int, message: str, level: int, db: db_dependency):
     """Ghi lại vi phạm vào cơ sở dữ liệu."""
@@ -29,7 +52,7 @@ async def log_violation_to_db(user_id: int, message: str, level: int, db: db_dep
     db.commit()
     db.refresh(violation)
 
-def update_strike_to_db(strikes: ViolationStrikeCreate, current_strikes: int, db: db_dependency):
+async def update_strike_to_db(strikes: ViolationStrikeCreate, current_strikes: int, db: db_dependency):
     """Cập nhật hoặc tạo mới số lần vi phạm trong database."""
     result = db.execute(select(ViolationStrike).where(ViolationStrike.user_id == strikes.user_id))
     strike_record = result.scalars().first()
@@ -95,7 +118,12 @@ async def process_violation(
         "violations": [message],
         "timestamp": datetime.now(VN_TIMEZONE).isoformat()
     }
-    await websocket.send_json(violation_payload)
+    logger.info(f"📤 Gửi violation payload: {violation_payload}")
+    try:
+        await websocket.send_json(violation_payload)
+        logger.info(f"✅ Đã gửi violation message thành công cho user {user_id}")
+    except Exception as e:
+        logger.error(f"❌ Lỗi khi gửi violation message: {e}")
     # --- Broadcast cho phòng nếu chat_id được truyền ---
     if chat_id:
         asyncio.create_task(manager.broadcast(
@@ -115,10 +143,21 @@ async def process_violation(
     if current_strikes >= 4:
         async def send_lock_email():
             try:
-                await send_violation_lock_email(user_id, '1 ngày', db)
-            except Exception:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Không thể gửi email thông báo khóa tài khoản."
-                })
+                # Lấy thông tin user để gửi email
+                user_info = await get_user(user_id)
+                if user_info:
+                    email = user_info.get("email", "")
+                    username = user_info.get("username", user_info.get("first_name", "Người dùng"))
+                    await send_violation_lock_email(email, username, '1 ngày')
+            except Exception as e:
+                logger.exception(f"Lỗi khi gửi email thông báo khóa tài khoản cho user {user_id}: {e}")
+                try:
+                    await websocket.send_json({
+                        "type": "error",
+                        "role": "system",
+                        "message": "Không thể gửi email thông báo khóa tài khoản.",
+                        "timestamp": datetime.now(VN_TIMEZONE).isoformat()
+                    })
+                except Exception:
+                    pass  # Nếu websocket đã đóng thì bỏ qua
         asyncio.create_task(send_lock_email())

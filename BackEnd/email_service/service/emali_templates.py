@@ -38,4 +38,9 @@ async def send_violation_lock_email(db: db_dependency, to: str, username: str, d
 
 async def send_user_lock_email(db: db_dependency, to: str, username: str, support_link: str):
     body = load_templates("user_lock.html", username=username, support_link=support_link)
-    return await send_email(db, to, "JarVis AI - Thông báo tài khoản bị khóa", body) 
+    return await send_email(db, to, "JarVis AI - Thông báo tài khoản bị khóa", body)
+
+async def send_contact_admin_email(db: db_dependency, admin_email: str, user_email: str, username: str, subject: str, message: str):
+    """Gửi email từ user bị chặn đến admin"""
+    body = load_templates("contact_admin.html", user_email=user_email, username=username, subject=subject, message=message)
+    return await send_email(db, admin_email, f"[Liên hệ từ người dùng bị chặn] {subject}", body)

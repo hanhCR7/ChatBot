@@ -184,7 +184,7 @@ async def validate_otp(user_id: int, otp: str):
             raise HTTPException(status_code=500, detail=f"Lỗi khi gửi mail thông báo: {repr(e)}")
 #Email đặt lại mật khẩu
 async def send_reset_password_email(email: str, reset_link: str):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.post(
                 f'{EMAIL_SERVICE_URL}send-password-reset-email/',
@@ -192,8 +192,19 @@ async def send_reset_password_email(email: str, reset_link: str):
             )
             if response.status_code == 200:
                 return response.json()
+            else:
+                # Log lỗi từ email service
+                error_detail = response.text if hasattr(response, 'text') else str(response.status_code)
+                raise HTTPException(
+                    status_code=500, 
+                    detail=f"Email service trả về lỗi: {error_detail}"
+                )
+        except httpx.TimeoutException as e:
+            raise HTTPException(status_code=500, detail=f"Timeout khi gửi email: {repr(e)}")
         except httpx.RequestError as e:
             raise HTTPException(status_code=500, detail=f"Lỗi khi gửi mail thông báo: {repr(e)}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Lỗi không xác định khi gửi email: {repr(e)}")
 async def get_user_by_email(email: str):
     headers = {"X-API-Key": SERVICE_KEY}
     async with httpx.AsyncClient() as client:
@@ -229,3 +240,33 @@ async def reset_update_password(user_id: int, new_password: str, confirm_passwor
             raise Exception(f"Request error: {response.text}")
         except httpx.RequestError as e:
             raise HTTPException(status_code=500, detail=f"Lỗi khi gửi mail thông báo: {repr(e)}")
+
+# Gửi email liên hệ admin cho user bị chặn
+async def send_contact_admin_email(user_email: str, username: str, subject: str, message: str, admin_email: str):
+    """Gửi email từ user bị chặn đến admin thông qua email service"""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(
+                f'{EMAIL_SERVICE_URL}send-contact-admin-email/',
+                json={
+                    "user_email": user_email,
+                    "username": username,
+                    "subject": subject,
+                    "message": message,
+                    "admin_email": admin_email
+                }
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                error_detail = response.text if hasattr(response, 'text') else str(response.status_code)
+                raise HTTPException(
+                    status_code=500, 
+                    detail=f"Email service trả về lỗi: {error_detail}"
+                )
+        except httpx.TimeoutException as e:
+            raise HTTPException(status_code=500, detail=f"Timeout khi gửi email: {repr(e)}")
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=500, detail=f"Lỗi khi gửi email liên hệ admin: {repr(e)}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Lỗi không xác định khi gửi email: {repr(e)}")
