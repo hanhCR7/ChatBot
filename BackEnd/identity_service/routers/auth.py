@@ -1,6 +1,7 @@
 import os
 import asyncio
 import uuid
+import logging
 from dotenv import load_dotenv
 from fastapi.responses import JSONResponse
 import jwt
@@ -18,11 +19,13 @@ from connect_service import (
     get_user, get_user_with_password, log_user_action, sign_up_user, 
     update_last_login, update_password, active_account, generate_activation_token, 
     send_email_otp, validate_otp, send_reset_password_email, get_user_by_email,
-    reset_update_password, send_user_lock_notification, send_contact_admin_email
+    reset_update_password, send_user_lock_notification, send_contact_admin_email,
+    get_user_strike_count
 )
 from service.redis_client import redis_clients, cache_user, get_cached_user
 from rate_limiter import rate_limiters
 router = APIRouter(prefix="/api/identity_service",tags=["authentication"])
+logger = logging.getLogger(__name__)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/identity_service/login")
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -117,18 +120,41 @@ async def login(login: Login):
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Tài khoản của bạn bị vô hiệu hóa hoặc bạn chưa kích hoạt tài khoản thông email đã gửi. Vui lòng sử dụng endpoint /api/identity_service/contact-admin để liên hệ Admin và yêu cầu mở lại tài khoản."
         )
+    
+    # Kiểm tra vi phạm: nếu user có >= 4 lần vi phạm thì không cho login
+    try:
+        strike_count = await get_user_strike_count(user_id)
+        if strike_count >= 4:
+            user_email = user_response.get("email") or user_response.get("user_email")
+            if user_email:
+                await send_user_lock_notification(user_email, username)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Tài khoản của bạn đã bị khóa do vi phạm nhiều lần (4 lần trở lên). Vui lòng sử dụng endpoint /api/identity_service/contact-admin để liên hệ Admin và yêu cầu mở lại tài khoản."
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Nếu có lỗi khi kiểm tra vi phạm, log nhưng không chặn login
+        logger.warning(f"Lỗi khi kiểm tra vi phạm cho user {user_id}: {e}")
     user_data = get_cached_user(user_id)
     if not user_data:
-        user_response = await get_user(user_id)
-        user_data = extract_user_data(user_response)
+        user_response_full = await get_user(user_id)
+        user_data = extract_user_data(user_response_full)
         if user_data:
             cache_user(user_id, user_data)
-    otp_required = await send_email_otp(user_id, user_response["email"], otp_type="login")
+    
+    # Lấy email từ user_response hoặc user_data
+    user_email = user_response.get("email") or user_data.get("email") if user_data else None
+    if not user_email:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Không thể lấy thông tin email của người dùng.")
+    
+    otp_required = await send_email_otp(user_id, user_email, otp_type="login")
     if not otp_required or otp_required.get("status") != "success":
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Không thể gửi mã OTP. Vui lòng thử lại sau.")
     return{
         "otp_required": True,
-        "user_id": user_response["user_id"],
+        "user_id": user_id,
         "message": "Mã OTP đã được gửi đến email của bạn. Vui lòng kiểm tra và nhập OTP để đăng nhập.",
     }
 @router.post("/validate-otp-login", status_code=status.HTTP_200_OK, dependencies=[Depends(rate_limiters(redis_clients, "validate_otp"))])

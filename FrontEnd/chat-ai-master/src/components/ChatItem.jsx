@@ -1,112 +1,146 @@
-import { forwardRef, useState } from "react";
-import { motion } from "framer-motion";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@radix-ui/react-dropdown-menu";
-import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { forwardRef, useEffect, useRef, useState } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { motion, AnimatePresence } from "framer-motion";
+import { createPortal } from "react-dom";
 
 const ChatItem = forwardRef(function ChatItem(
   { chat, active, onClick, onRename, onDelete },
   ref
 ) {
-  const [hovered, setHovered] = useState(false);
+  const titleRef = useRef(null);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [isTruncated, setIsTruncated] = useState(false);
+
+  /* ===== detect truncate ===== */
+  useEffect(() => {
+    if (!titleRef.current) return;
+    const el = titleRef.current;
+    setIsTruncated(el.scrollWidth > el.clientWidth);
+  }, [chat.title]);
 
   return (
-    <motion.div
-      ref={ref}
-      whileHover={{ x: 4 }}
-      transition={{ type: "spring", stiffness: 400, damping: 25 }}
-      className={`relative flex items-center px-4 py-3 rounded-xl cursor-pointer select-none transition-all duration-300 ease-out group will-change-transform ${
-        active
-          ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg shadow-blue-500/30"
-          : "hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
-      }`}
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div className="flex-1 min-w-0">
-        <span
-          className={`block truncate text-sm font-medium ${
-            active ? "text-white" : "text-gray-900 dark:text-gray-100"
-          }`}
+    <div ref={ref} className="relative px-2">
+      {/* ===== MAIN BUTTON ===== */}
+      <button
+        onClick={onClick}
+        className={`
+          group w-full rounded-lg px-3 py-2 text-left transition
+          flex items-center gap-2
+          ${
+            active
+              ? "bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white"
+              : "hover:bg-gray-100 dark:hover:bg-gray-800"
+          }
+        `}
+      >
+        {/* ===== TITLE ===== */}
+        <div
+          className="flex-1 min-w-0"
+          onMouseEnter={() => isTruncated && setShowTooltip(true)}
+          onMouseLeave={() => setShowTooltip(false)}
         >
-          {chat.title}
-        </span>
-        {chat.createdAt && (
           <span
-            className={`text-xs mt-0.5 block ${
-              active
-                ? "text-blue-100"
-                : "text-gray-500 dark:text-gray-400"
-            }`}
+            ref={titleRef}
+            className="block truncate text-sm font-medium"
           >
-            {new Date(chat.createdAt).toLocaleDateString("vi-VN", {
-              day: "numeric",
-              month: "short",
-            })}
+            {chat.title}
           </span>
-        )}
-      </div>
+        </div>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: hovered || active ? 1 : 0, scale: hovered || active ? 1 : 0.8 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="will-change-transform"
-          >
-            <Button
-              size="icon"
-              variant="ghost"
-              className={`h-8 w-8 p-0 ${
-                active
-                  ? "text-white hover:bg-white/20"
-                  : "text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-              } transition-all`}
-              aria-label="Menu"
+        {/* ===== ACTIONS ===== */}
+        <DropdownMenu.Root modal={false}>
+          <DropdownMenu.Trigger asChild>
+            <div
               onClick={(e) => e.stopPropagation()}
+              className={`
+                opacity-0 group-hover:opacity-100 transition
+                ${active ? "opacity-100" : ""}
+              `}
             >
-              <MoreVertical className="w-4 h-4" />
-            </Button>
-          </motion.div>
-        </DropdownMenuTrigger>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </Button>
+            </div>
+          </DropdownMenu.Trigger>
 
-        <DropdownMenuContent
-          side="right"
-          align="start"
-          className="w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl text-sm p-1 z-50"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault();
-              onRename();
-            }}
-            className="flex items-center gap-2 px-3 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer rounded-lg transition-colors"
-          >
-            <Pencil className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-            <span className="font-medium">Đổi tên</span>
-          </DropdownMenuItem>
+          {/* ===== PORTAL FIX ===== */}
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              side="right"
+              align="start"
+              sideOffset={6}
+              className="
+                z-[99999] min-w-[160px]
+                rounded-md border bg-white dark:bg-gray-900
+                shadow-lg p-1 text-sm
+              "
+            >
+              <DropdownMenu.Item
+                onSelect={(e) => {
+                  e.preventDefault();
+                  onRename();
+                }}
+                className="flex items-center gap-2 px-3 py-2 rounded
+                  cursor-pointer outline-none
+                  hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <Pencil className="w-4 h-4" />
+                Đổi tên
+              </DropdownMenu.Item>
 
-          <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault();
-              if (window.confirm("Xoá đoạn chat này?")) onDelete();
-            }}
-            className="flex items-center gap-2 px-3 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 cursor-pointer rounded-lg transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-            <span className="font-medium">Xoá</span>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </motion.div>
+              <DropdownMenu.Item
+                onSelect={(e) => {
+                  e.preventDefault();
+                  if (confirm("Xoá cuộc trò chuyện này?")) onDelete();
+                }}
+                className="flex items-center gap-2 px-3 py-2 rounded
+                  cursor-pointer outline-none
+                  text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+              >
+                <Trash2 className="w-4 h-4" />
+                Xóa
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      </button>
+
+      {/* ===== TOOLTIP (CHỈ KHI TRUNCATE) ===== */}
+      {typeof window !== "undefined" &&
+        showTooltip &&
+        isTruncated &&
+        createPortal(
+          <AnimatePresence>
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.12 }}
+              className="
+                fixed z-[99999]
+                max-w-xs px-3 py-1.5
+                rounded-md bg-gray-800 text-white
+                text-sm shadow-lg pointer-events-none
+              "
+              style={{
+                top:
+                  titleRef.current?.getBoundingClientRect().bottom + 6,
+                left:
+                  titleRef.current?.getBoundingClientRect().left,
+              }}
+            >
+              {chat.title}
+            </motion.div>
+          </AnimatePresence>,
+          document.body
+        )}
+    </div>
   );
 });
 

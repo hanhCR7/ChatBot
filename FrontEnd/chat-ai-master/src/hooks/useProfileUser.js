@@ -13,21 +13,21 @@ const userProfileUser= () => {
     }
   };
   const getUpdateUser = async (id, payload) => {
-    const res = await axiosUser.put(
-      `api/user_service/user/update-info/${id}`,
-      payload
-    );
-    return res.data;
+    try {
+      const res = await axiosUser.put(
+        `/api/user_service/user/update-info/${id}`,
+        payload
+      );
+      return res.data;
+    } catch (error) {
+      console.error("Error updating user:", error);
+      throw error;
+    }
   };
-  const validateOtpUpdate = async (userId, otp) => {
-    const res = await axiosUser.post(`api/user_service/user/validate-otp/${userId}`, { "otp_code": otp })
-    return res.data;
-  }
 
   return {
     getMe,
-    getUpdateUser,
-    validateOtpUpdate
+    getUpdateUser
   };
 };
 

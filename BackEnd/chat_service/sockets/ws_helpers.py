@@ -10,7 +10,7 @@ import httpx
 from models import ChatSession
 from service.redis_client import redis_client
 from db_config import db_dependency
-from service.violation_handler import contains_violation, process_violation
+from service.violation_handler import contains_violation, process_violation, get_user_strike_count, is_user_banned_from_chat
 from routers.openai_utils import generate_response, generate_title
 from crud import add_message_to_chat, update_chat_session
 from schemas import AddMessage, ChatSessionUpdate
@@ -136,14 +136,14 @@ async def stream_ai_response(
             # Thông báo cho user biết response bị cắt
             await send_payload({
                 "role": "system",
-                "content": "⚠️ Kết nối bị ngắt, nhưng đã nhận được một phần phản hồi. Vui lòng thử lại nếu cần.",
+                "content": "Kết nối bị ngắt, nhưng đã nhận được một phần phản hồi. Vui lòng thử lại nếu cần.",
                 "timestamp": now_vn().isoformat(),
             })
         else:
             # Nếu chưa nhận được gì, thông báo lỗi
             await send_payload({
                 "role": "system",
-                "content": "❌ Lỗi kết nối khi nhận phản hồi từ AI. Vui lòng thử lại.",
+                "content": "Lỗi kết nối khi nhận phản hồi từ AI. Vui lòng thử lại.",
                 "timestamp": now_vn().isoformat(),
             })
         
@@ -225,34 +225,51 @@ async def handle_send_message(
             await manager.broadcast(chat_id, payload, skip_user_id=skip_user)
         except Exception:
             logger.warning("Không thể gửi dữ liệu đến các client (qua websocket hoặc broadcast).", exc_info=True)     
-    # Check ban
-    ban_key = f"chat_ban:{user_id}"
-    is_banned = False
-    try:
-        if await redis_client.exists(ban_key):
-            is_banned = True
-            logger.info("User %s is banned (key=%s)", user_id, ban_key)
-            await send_to_clients({
-                "role": "system",
-                "content": "Bạn đang bị cấm chat tạm thời do vi phạm nội dung.",
-                "timestamp": timestamp.isoformat(),
-            }, skip_user=user_id)
-            # Không return ngay, vẫn check violation để tăng strike count
-    except Exception:
-        logger.exception("Error checking ban status in redis")
-
-    # Kiểm tra vi phạm (vẫn check ngay cả khi đang bị ban để tăng strike)
+    # Kiểm tra vi phạm TRƯỚC (để tăng strike nếu có vi phạm mới)
     has_violation = await contains_violation(user_input)
-    logger.info(f"🔍 Kiểm tra vi phạm cho message: '{user_input}' - Kết quả: {has_violation}")
+    logger.info(f"Kiểm tra vi phạm cho message: '{user_input}' - Kết quả: {has_violation}")
     if has_violation:
-        logger.info(f"🚨 Phát hiện hành vi vi phạm của người dùng {user_id}. Message: {user_input}")
+        logger.info(f"Phát hiện hành vi vi phạm của người dùng {user_id}. Message: {user_input}")
         await process_violation(websocket, user_input, db, user_data, chat_id)
-        logger.info(f"✅ Đã xử lý vi phạm và gửi violation message cho user {user_id}")
+        logger.info(f"Đã xử lý vi phạm và gửi violation message cho user {user_id}")
         # Return sớm để không lưu message vi phạm vào DB
         return
     
-    # Nếu đang bị ban và không có violation, return luôn
-    if is_banned:
+    # Sau khi check violation, kiểm tra ban (strike có thể đã tăng sau khi process_violation)
+    is_banned = await is_user_banned_from_chat(user_id)
+    strike_count = await get_user_strike_count(user_id, db)
+    
+    # Nếu user có >= 4 lần vi phạm, chặn hoàn toàn
+    if strike_count >= 4:
+        await send_to_clients({
+            "role": "system",
+            "type": "violation",
+            "content": "Tài khoản của bạn đã bị khóa do vi phạm nhiều lần. Vui lòng liên hệ admin để được hỗ trợ.",
+            "level": 4,
+            "ban_time": 86400,
+            "timestamp": timestamp.isoformat(),
+        }, skip_user=user_id)
+        logger.info("User %s bị chặn do có %d lần vi phạm", user_id, strike_count)
+        return
+    
+    # Nếu đang bị ban (strike >= 2), chặn chat
+    if is_banned or strike_count >= 2:
+        violation_message = "Bạn đang bị cấm chat do vi phạm nội dung. "
+        if strike_count == 2:
+            violation_message += "Bạn bị cấm chat 5 phút (vi phạm lần 2)."
+        elif strike_count == 3:
+            violation_message += "Bạn bị cấm chat 1 giờ (vi phạm lần 3)."
+        
+        await send_to_clients({
+            "role": "system",
+            "type": "violation",
+            "content": violation_message,
+            "level": strike_count,
+            "ban_time": 300 if strike_count == 2 else 3600 if strike_count == 3 else 0,
+            "timestamp": timestamp.isoformat(),
+        }, skip_user=user_id)
+        logger.info("User %s bị cấm chat (strike: %d, banned: %s) - Chặn không cho gửi tin nhắn", user_id, strike_count, is_banned)
+        # Return ngay để chặn không cho gửi tin nhắn khi đang bị ban
         return
 
     # Lưu tin nhắn của người dùng (transaction-safe)
@@ -298,36 +315,49 @@ async def handle_send_message(
         # Nếu DB có tiêu đề mặc định hoặc rỗng -> thử generate
         cur_title = (getattr(chat_session, "title", None) or "").strip()
         if cur_title in ["", "New Chat", "Cuộc trò chuyện mới"]:
+            new_title = None
             # Kiểm tra cache Redis trước
             title_cache_key = f"chat_title:{chat_id}"
             try:
                 cached = await redis_client.get(title_cache_key)
-            except Exception:
+                if cached:
+                    new_title = cached.decode() if isinstance(cached, (bytes, bytearray)) else str(cached)
+                    logger.debug(f"Lấy tiêu đề từ cache Redis: {new_title}")
+            except Exception as e:
+                logger.debug(f"Không thể lấy title từ Redis cache: {e}")
                 cached = None
-            if cached:
-                new_title = cached.decode() if isinstance(cached, (bytes, bytearray)) else str(cached)
-                logger.debug(f"Lấy tiêu đề từ cache Redis: {new_title}")
-            else:
-                title_context = [{"role": "user", "content": user_input}, {"role": "assistant", "content": assistant_reply}]
-                new_title = await generate_title(title_context)
-                # Lưu cache (nếu hợp lệ)
-                if new_title and new_title not in ["New Chat", "Cuộc trò chuyện mới"]:
-                    try:
-                        # lưu không TTL (persistent) - bạn có thể thêm TTL nếu muốn
-                        await redis_client.set(title_cache_key, new_title)
-                    except Exception:
-                        logger.warning("Không thể lưu title vào Redis")
+            
+            # Nếu không có trong cache, generate title mới
+            if not new_title:
+                try:
+                    title_context = [
+                        {"role": "user", "content": user_input}, 
+                        {"role": "assistant", "content": assistant_reply}
+                    ]
+                    new_title = await generate_title(title_context)
+                    logger.debug(f"Đã generate title mới: {new_title}")
+                    
+                    # Lưu cache (nếu hợp lệ)
+                    if new_title and new_title not in ["New Chat", "Cuộc trò chuyện mới"]:
+                        try:
+                            # Lưu cache với TTL 1 giờ để tránh cache vĩnh viễn
+                            await redis_client.setex(title_cache_key, 3600, new_title)
+                        except Exception as e:
+                            logger.warning(f"Không thể lưu title vào Redis: {e}")
+                except Exception as e:
+                    logger.error(f"Lỗi khi generate title: {e}")
+                    new_title = None
 
             # Cập nhật DB nếu title hợp lệ
-            if new_title and new_title not in ["New Chat", "Cuộc trò chuyện mới"]:
+            if new_title and new_title.strip() and new_title not in ["New Chat", "Cuộc trò chuyện mới"]:
                 try:
-                    update_chat_session(db, chat_id, ChatSessionUpdate(title=new_title))
+                    update_chat_session(db, chat_id, ChatSessionUpdate(title=new_title.strip()))
                     db.commit()
-                    await send_to_clients({"role": "system", "event": "TITLE_UPDATED", "title": new_title})
-                    logger.info(f"Đã cập nhật tiêu đề cho cuộc trò chuyện {chat_id} -> {new_title}")
-                except Exception:
+                    await send_to_clients({"role": "system", "event": "TITLE_UPDATED", "title": new_title.strip()})
+                    logger.info(f"Đã cập nhật tiêu đề cho cuộc trò chuyện {chat_id} -> {new_title.strip()}")
+                except Exception as e:
                     db.rollback()
-                    logger.exception("Không thể cập nhật tiêu đề trong DB")
+                    logger.exception(f"Không thể cập nhật tiêu đề trong DB: {e}")
     except Exception as e:
         logger.warning(f"Không thể cập nhật tiêu đề cuộc trò chuyện: {e}")
 

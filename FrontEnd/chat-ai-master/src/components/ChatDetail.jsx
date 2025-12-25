@@ -25,6 +25,8 @@ export default function ChatDetail({ darkMode }) {
   const [input, setInput] = useState("");
   const [bannedKeywords, setBannedKeywords] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [isBanned, setIsBanned] = useState(false);
+  const [banLevel, setBanLevel] = useState(0);
 
   const messagesEndRef = useRef(null);
   const messageContainerRef = useRef(null);
@@ -60,9 +62,8 @@ export default function ChatDetail({ darkMode }) {
         const data = await getAllBannedKeywords();
         const keywords = data.map((k) => k.keyword.toLowerCase());
         setBannedKeywords(keywords);
-        console.log("✅ Đã tải", keywords.length, "từ khóa bị cấm:", keywords);
       } catch (err) {
-        console.error("❌ Không thể tải từ khóa bị cấm:", err);
+        // Lỗi tải từ khóa bị cấm
       }
     })();
   }, [getAllBannedKeywords]);
@@ -84,11 +85,9 @@ export default function ChatDetail({ darkMode }) {
 
   const pushAlert = useCallback(({ type = "local", message = "" }) => {
     const id = `${type}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    console.log("🚨 Alert được tạo:", { id, type, message });
     
     setAlerts((prev) => {
       const newAlerts = [...prev, { id, type, message }];
-      console.log("📋 Alerts hiện tại:", newAlerts);
       return newAlerts;
     });
     
@@ -106,8 +105,6 @@ export default function ChatDetail({ darkMode }) {
   useEffect(() => {
     if (!violations || violations.length === 0) return;
     
-    console.log("🔔 Nhận được violations từ server:", violations);
-    
     // Lọc ra những violations chưa được xử lý
     const unprocessedViolations = violations.filter((v) => {
       const violationId = v.id || v.timestamp || `${v.message}-${v.timestamp}`;
@@ -115,17 +112,21 @@ export default function ChatDetail({ darkMode }) {
     });
     
     if (unprocessedViolations.length === 0) {
-      console.log("⏭️ Tất cả violations đã được xử lý");
       return;
     }
-    
-    console.log("🆕 Violations mới cần xử lý:", unprocessedViolations);
     
     // Tạo alerts từ violations mới với ID unique
     const newAlerts = unprocessedViolations.map((v) => {
       const violationId = v.id || v.timestamp || `${v.message}-${v.timestamp}`;
       // Đánh dấu đã xử lý
       processedViolationsRef.current.add(violationId);
+      
+      // Cập nhật trạng thái ban ngay lập tức nếu có vi phạm >= 2
+      // Đảm bảo chặn chat ngay khi nhận violation message
+      if (v.level >= 2) {
+        setIsBanned(true);
+        setBanLevel(v.level);
+      }
       
       return {
         id: `server-${violationId}-${Math.random().toString(36).substr(2, 9)}`,
@@ -136,13 +137,10 @@ export default function ChatDetail({ darkMode }) {
       };
     });
     
-    console.log("📨 Tạo alerts từ violations:", newAlerts);
-    
     // Thêm alerts mới vào danh sách (tránh duplicate)
     setAlerts((prev) => {
       const unique = newAlerts.filter((a) => !prev.some((p) => p.id === a.id));
       const updated = [...prev, ...unique];
-      console.log("✅ Cập nhật alerts:", updated);
       
       // Tự động xóa alerts sau 5 giây
       unique.forEach((alert) => {
@@ -170,6 +168,23 @@ export default function ChatDetail({ darkMode }) {
       return;
     }
 
+    // Kiểm tra nếu user đang bị ban - CHẶN NGAY
+    if (isBanned || banLevel >= 2) {
+      const banMessage = banLevel >= 4 
+        ? "Tài khoản của bạn đã bị khóa do vi phạm nhiều lần. Vui lòng liên hệ admin để được hỗ trợ."
+        : banLevel === 3
+        ? "Bạn đang bị cấm chat 1 giờ do vi phạm lần 3. Vui lòng đợi hết thời gian cấm."
+        : banLevel === 2
+        ? "Bạn đang bị cấm chat 5 phút do vi phạm lần 2. Vui lòng đợi hết thời gian cấm."
+        : "Bạn đang bị cấm chat do vi phạm nội dung. Vui lòng đợi hết thời gian cấm.";
+      
+      pushAlert({ 
+        type: "local", 
+        message: banMessage
+      });
+      return;
+    }
+
     // Xử lý gửi tin nhắn text thông thường
     const trimmedInput = input.trim();
     if (!trimmedInput) return;
@@ -177,14 +192,12 @@ export default function ChatDetail({ darkMode }) {
     // Không cảnh báo ở client-side nữa, để server xử lý và gửi violation message về
     // Client-side check chỉ để debug/log
     if (containsBanned(trimmedInput)) {
-      console.log("⚠️ [Client-side] Phát hiện từ khóa bị cấm trong:", trimmedInput);
-      console.log("📤 [Client-side] Vẫn gửi lên server để server xử lý vi phạm");
       // Không push alert ở đây, đợi server gửi violation message về
     }
 
     sendMessage(trimmedInput);
     setInput("");
-  }, [connected, input, containsBanned, sendMessage, pushAlert]);
+  }, [connected, input, containsBanned, sendMessage, pushAlert, isBanned, banLevel]);
 
   useEffect(() => {
     return () => {
@@ -227,7 +240,6 @@ export default function ChatDetail({ darkMode }) {
         <div className="relative z-50 m-4 space-y-2 fixed top-20 left-0 right-0 max-w-2xl mx-auto pointer-events-none">
           <AnimatePresence mode="popLayout">
             {alerts.map((a) => {
-              console.log("🎨 [Render] Rendering alert:", a.id, a.message);
               return (
               <motion.div
                 key={a.id}
@@ -284,7 +296,7 @@ export default function ChatDetail({ darkMode }) {
               Trợ lý lập trình thông minh của bạn
             </p>
             <p className="text-gray-500 dark:text-gray-500 text-sm max-w-md">
-              Hãy bắt đầu cuộc trò chuyện bằng cách đặt câu hỏi về lập trình, code review, hoặc upload file để phân tích.
+              Hãy bắt đầu cuộc trò chuyện bằng cách đặt câu hỏi về lập trình, code review, ...
             </p>
           </motion.div>
         )}
@@ -337,9 +349,17 @@ export default function ChatDetail({ darkMode }) {
                   handleSend();
                 }
               }}
-              placeholder={connected ? "Nhập tin nhắn của bạn..." : "Đang kết nối..."}
+              placeholder={
+                !connected 
+                  ? "Đang kết nối..." 
+                  : isBanned || banLevel >= 2
+                  ? banLevel >= 4
+                    ? "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ admin."
+                    : "Bạn đang bị cấm chat do vi phạm nội dung."
+                  : "Nhập tin nhắn của bạn..."
+              }
               className="w-full resize-none rounded-2xl border-2 px-5 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-300 dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-500 transition-all duration-300 ease-out shadow-sm hover:shadow-md focus:shadow-lg will-change-transform"
-              disabled={!connected}
+              disabled={!connected || isBanned || banLevel >= 2}
             />
             <div className="absolute bottom-2 right-3 text-xs text-gray-400 dark:text-gray-600 pointer-events-none">
               {input.length > 0 && `${input.length} ký tự`}
@@ -350,9 +370,9 @@ export default function ChatDetail({ darkMode }) {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleSend}
-            disabled={!input.trim() || !connected}
+            disabled={!input.trim() || !connected || isBanned || banLevel >= 2}
             className="p-3.5 rounded-xl text-white transition-all duration-300 ease-out bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 dark:from-blue-600 dark:to-blue-700 dark:hover:from-blue-700 dark:hover:to-blue-800 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg hover:shadow-xl disabled:shadow-md will-change-transform"
-            title="Gửi tin nhắn"
+            title={isBanned || banLevel >= 2 ? "Bạn đang bị cấm chat" : "Gửi tin nhắn"}
           >
             <PaperPlaneIcon className="w-5 h-5" />
           </motion.button>

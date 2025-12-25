@@ -7,7 +7,6 @@ export default function useBannedKeywordsApi() {
       const res = await axios.get("/api/chatbot_service/banned_keywords");
       return res.data || [];
     } catch (err) {
-      console.error("Lỗi tải banned keywords:", err);
       return [];
     }
   }, []); // memo hóa, reference cố định

@@ -21,21 +21,30 @@ import { useProfileAdmin } from "@/hooks/admin/useProfileAdmin";
 import useAuthApi from "@/hooks/useAuthAPI";
 import { useNavigate } from "react-router-dom";
 import ProfileModal from "./ProfileAdmin";
+import SettingsModal from "./SettingsModal";
 import useAdminUserApi from "@/hooks/admin/useAdminUserAPI";
 import useAdminLogs from "@/hooks/admin/useAdminLogs";
+import { useTranslation } from "@/hooks/useTranslation";
+import { useLanguage } from "@/contexts/LanguageContext";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/vi";
+import "dayjs/locale/en";
 
 dayjs.extend(relativeTime);
-dayjs.locale("vi");
 
 export default function HeaderAdmin({ onToggleSidebar }) {
   const { getAdmin } = useProfileAdmin();
   const { getAllUser } = useAdminUserApi();
   const { getAllLog } = useAdminLogs();
+  const { t, language } = useTranslation();
   const [admin, setAdmin] = useState(null);
+  
+  useEffect(() => {
+    dayjs.locale(language === "vi" ? "vi" : "en");
+  }, [language]);
   const [openProfile, setOpenProfile] = useState(false);
+  const [openSettings, setOpenSettings] = useState(false);
   const [darkMode, setDarkMode] = useState(
     document.documentElement.classList.contains("dark")
   );
@@ -130,8 +139,8 @@ export default function HeaderAdmin({ onToggleSidebar }) {
         notificationList.push({
           id: "new-logs",
           type: "log",
-          title: `${recentLogs.length} log mới`,
-          message: `Có ${recentLogs.length} hoạt động mới trong 24h qua`,
+          title: `${recentLogs.length} ${t("admin.newLogs")}`,
+          message: t("admin.newLogsMessage", { count: recentLogs.length }),
           icon: Activity,
           color: "purple",
           timestamp: now.toISOString(),
@@ -144,8 +153,8 @@ export default function HeaderAdmin({ onToggleSidebar }) {
         notificationList.push({
           id: "critical-violations",
           type: "critical",
-          title: `${criticalViolations.length} vi phạm nghiêm trọng`,
-          message: `Có ${criticalViolations.length} vi phạm mức độ cao trong 24h qua`,
+          title: `${criticalViolations.length} ${t("admin.criticalViolations")}`,
+          message: t("admin.criticalViolationsMessage", { count: criticalViolations.length }),
           icon: ShieldAlert,
           color: "red",
           timestamp: now.toISOString(),
@@ -158,8 +167,8 @@ export default function HeaderAdmin({ onToggleSidebar }) {
         notificationList.push({
           id: "new-violations",
           type: "violation",
-          title: `${recentViolations.length} vi phạm mới`,
-          message: `Có ${recentViolations.length} vi phạm trong 24h qua`,
+          title: `${recentViolations.length} ${t("admin.newViolations")}`,
+          message: t("admin.newViolationsMessage", { count: recentViolations.length }),
           icon: AlertTriangle,
           color: "orange",
           timestamp: now.toISOString(),
@@ -172,8 +181,8 @@ export default function HeaderAdmin({ onToggleSidebar }) {
         notificationList.push({
           id: "new-users",
           type: "user",
-          title: `${newUsers.length} người dùng mới`,
-          message: `Có ${newUsers.length} người dùng đăng ký trong 24h qua`,
+          title: `${newUsers.length} ${t("admin.newUsers")}`,
+          message: t("admin.newUsersMessage", { count: newUsers.length }),
           icon: UserPlus,
           color: "blue",
           timestamp: now.toISOString(),
@@ -188,7 +197,7 @@ export default function HeaderAdmin({ onToggleSidebar }) {
     } finally {
       isFetchingRef.current = false;
     }
-  }, []); // Empty deps - chỉ chạy khi component mount
+  }, [t, language]); // Include t and language in deps
 
   useEffect(() => {
     fetchNotifications();
@@ -197,7 +206,7 @@ export default function HeaderAdmin({ onToggleSidebar }) {
       fetchNotifications();
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []); // Chỉ chạy một lần khi mount
+  }, [fetchNotifications]); // Include fetchNotifications in deps
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -240,7 +249,7 @@ export default function HeaderAdmin({ onToggleSidebar }) {
             animate={{ opacity: 1, x: 0 }}
             className="text-lg sm:text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent hidden sm:block"
           >
-            Admin Dashboard
+            {t("admin.adminDashboard")}
           </motion.h1>
         </div>
 
@@ -283,7 +292,7 @@ export default function HeaderAdmin({ onToggleSidebar }) {
                 >
                   <div className="px-4 py-3 border-b border-gray-200/50 dark:border-gray-700/50 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-700 flex items-center justify-between">
                     <h3 className="font-bold text-gray-900 dark:text-white">
-                      Thông báo
+                      {t("admin.notifications")}
                     </h3>
                     <button
                       onClick={() => setOpenNotifications(false)}
@@ -297,7 +306,7 @@ export default function HeaderAdmin({ onToggleSidebar }) {
                     {notifications.length === 0 ? (
                       <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                         <Bell className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">Không có thông báo mới</p>
+                        <p className="text-sm">{t("admin.noNotifications")}</p>
                       </div>
                     ) : (
                       notifications.map((notif, index) => {
@@ -361,7 +370,7 @@ export default function HeaderAdmin({ onToggleSidebar }) {
                         }}
                         className="w-full text-center text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium"
                       >
-                        Xem tất cả logs
+                        {t("admin.viewAllLogs")}
                       </button>
                     </div>
                   )}
@@ -422,7 +431,8 @@ export default function HeaderAdmin({ onToggleSidebar }) {
                   <div className="py-1">
                     <motion.button
                       whileHover={{ x: 4 }}
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setOpenProfile(true);
                         setOpenMenu(false);
                       }}
@@ -431,23 +441,22 @@ export default function HeaderAdmin({ onToggleSidebar }) {
                       <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
                         <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       </div>
-                      <span className="font-medium">Profile</span>
+                      <span className="font-medium">{t("profile.title")}</span>
                     </motion.button>
-
-                    <ProfileModal
-                      open={openProfile}
-                      onClose={() => setOpenProfile(false)}
-                      admin={admin}
-                    />
 
                     <motion.button
                       whileHover={{ x: 4 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenSettings(true);
+                        setOpenMenu(false);
+                      }}
                       className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
                     >
                       <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700">
                         <SettingsIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                       </div>
-                      <span className="font-medium">Settings</span>
+                      <span className="font-medium">{t("settings.title")}</span>
                     </motion.button>
                   </div>
                   
@@ -461,7 +470,7 @@ export default function HeaderAdmin({ onToggleSidebar }) {
                     <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
                       <LogOut className="w-4 h-4" />
                     </div>
-                    <span className="font-medium">Logout</span>
+                    <span className="font-medium">{t("auth.logout")}</span>
                   </motion.button>
                 </motion.div>
               )}
@@ -469,6 +478,21 @@ export default function HeaderAdmin({ onToggleSidebar }) {
           </div>
         </div>
       </div>
+
+      {/* Profile Modal - Render outside dropdown */}
+      <ProfileModal
+        open={openProfile}
+        onClose={() => setOpenProfile(false)}
+        admin={admin}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal
+        open={openSettings}
+        onClose={() => setOpenSettings(false)}
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
+      />
     </header>
   );
 }

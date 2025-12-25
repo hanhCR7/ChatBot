@@ -25,6 +25,5 @@ async def refresh_keywords_cache():
         if keywords:
             await redis_client.sadd(BANNED_KEYWORDS_KEY, *keywords)
             await redis_client.expire(BANNED_KEYWORDS_KEY, BANNED_KEYWORDS_TTL)
-        print("🔄 Refreshed banned keywords in Redis:", keywords)
     finally:
         db.close()

@@ -77,7 +77,6 @@ async def send_violation_lock_email(recipient: str, username: str, duration: str
             if response.status_code == 200:
                 return response.json()
             else:
-                print(f"Error: {response.status_code} - {response.text}")
                 raise HTTPException(status_code=response.status_code, detail="Gửi email không thành công")
         except httpx.RequestError as e:
             raise HTTPException(status_code=500, detail=f"Lỗi khi gửi yêu cầu đến dịch vụ email: {repr(e)}")

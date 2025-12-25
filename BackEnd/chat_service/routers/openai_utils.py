@@ -1,8 +1,11 @@
 from openai import AsyncOpenAI
 import os
 import re
+import logging
 from langdetect import detect
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -19,72 +22,90 @@ async def generate_response(chatlog):
         stream=True
     )
 
-async def generate_title(messages: list[str]) -> str:
+async def generate_title(messages: list[dict]) -> str:
     """
-    Tạo tiêu đề ngắn gọn kiểu ChatGPT từ hội thoại.
-    Auto detect ngôn ngữ (vi/en).
-    Luôn trả về cụm danh từ, ngắn gọn, tổng quát, max 6 từ.
+    Generate a natural ChatGPT-style conversation title (vi/en).
+    - No word-splitting
+    - No technical-word filtering
+    - No broken Vietnamese
     """
+    DEFAULT_TITLE_VI = "Cuộc trò chuyện mới"
+    DEFAULT_TITLE_EN = "New Chat"
+
     if not messages:
-        return "Cuộc trò chuyện mới"
+        return DEFAULT_TITLE_VI
 
-    content = "\n".join(
-        [m.get("content", "") if isinstance(m, dict) else str(m) for m in messages[:3]]
-    ).strip()
+    # Lấy message đầu tiên của user
+    user_message = None
+    for m in messages:
+        if isinstance(m, dict) and m.get("role") == "user":
+            content = m.get("content", "").strip()
+            if content:
+                user_message = content
+                break
 
+    if not user_message:
+        return DEFAULT_TITLE_VI
+
+    # Lấy dòng đầu + giới hạn độ dài context
+    context = user_message.split("\n")[0].strip()
+    context = context[:200]
+
+    # Detect language
     try:
-        lang = detect(content)
+        lang = detect(context)
     except Exception:
-        lang = "en"
+        lang = "vi"
 
     if lang.startswith("vi"):
-        default_title = "Cuộc trò chuyện mới"
+        default_title = DEFAULT_TITLE_VI
         prompt = (
-            "Bạn là AI chuyên tạo tiêu đề ngắn gọn, súc tích cho cuộc hội thoại.\n\n"
+            "Bạn là ChatGPT.\n\n"
+            "Hãy đặt một tiêu đề NGẮN GỌN (3–6 từ), TỰ NHIÊN, "
+            "giống cách người dùng đặt tên cuộc trò chuyện.\n\n"
             "YÊU CẦU:\n"
-            "- Trả về CHỈ 1 cụm từ danh từ (tối đa 6 từ)\n"
-            "- KHÔNG viết câu hoàn chỉnh, KHÔNG giải thích\n"
-            "- KHÔNG thêm prefix như 'Tiêu đề:', 'Title:', hoặc dấu câu\n"
-            "- Tiêu đề phải tổng quát, dễ hiểu, phù hợp với nội dung chính của cuộc trò chuyện\n"
-            "- Phong cách giống ChatGPT: ngắn gọn, rõ ràng\n\n"
-            f"Cuộc hội thoại:\n{content}\n\n"
-            "Trả về CHỈ tiêu đề (không có gì khác):"
+            "- Phản ánh CHỦ ĐỀ CHÍNH\n"
+            "- Ngôn ngữ đời thường\n"
+            "- Không mang tính kỹ thuật\n"
+            "- Không dùng các từ như: lỗi, bug, database, API\n\n"
+            f"Nội dung:\n{context}\n\n"
+            "Chỉ trả về TIÊU ĐỀ, không giải thích:"
         )
     else:
-        default_title = "New Chat"
+        default_title = DEFAULT_TITLE_EN
         prompt = (
-            "You are an AI specialized in generating short, concise titles for chat conversations.\n\n"
+            "You are ChatGPT.\n\n"
+            "Create a SHORT (3–6 words), NATURAL conversation title, "
+            "like how a user would name a chat.\n\n"
             "REQUIREMENTS:\n"
-            "- Output ONLY one noun phrase (maximum 6 words)\n"
-            "- Do NOT write a complete sentence, do NOT explain\n"
-            "- Do NOT add prefixes like 'Title:', 'Tiêu đề:', or punctuation\n"
-            "- Title must be general, easy to understand, relevant to the main conversation content\n"
-            "- ChatGPT style: short and clear\n\n"
-            f"Conversation:\n{content}\n\n"
-            "Return ONLY the title (nothing else):"
+            "- Reflect the MAIN TOPIC\n"
+            "- Everyday language\n"
+            "- Avoid technical terms\n\n"
+            f"Content:\n{context}\n\n"
+            "Return ONLY the title:"
         )
 
     try:
         response = await client.chat.completions.create(
             model=MODEL_TITLE,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.0,
-            max_tokens=16,
+            temperature=0.4,
+            max_tokens=20,
         )
 
-        raw_title = response.choices[0].message.content.strip()
+        title = response.choices[0].message.content.strip()
 
-        # Xóa prefix, ký tự thừa
-        raw_title = re.sub(r'^(Tiêu đề[:：]\s*|Title[:：]\s*)', '', raw_title, flags=re.IGNORECASE)
-        clean_title = re.sub(r'[\"“”‘’\'.:;!?()\n]', '', raw_title).strip()
+        # Clean nhẹ – KHÔNG phá nghĩa
+        title = title.replace("\n", " ").strip()
+        title = title.strip('"“”')
 
-        # Giữ max 5 từ
-        words = clean_title.split()
-        if len(words) > 5:
-            clean_title = " ".join(words[:6])
+        # Giới hạn theo KÝ TỰ (an toàn cho tiếng Việt)
+        if len(title) > 40:
+            title = title[:40].rstrip()
 
-        return clean_title if clean_title else default_title
+        return title if len(title) >= 3 else default_title
 
     except Exception as e:
-        print(f"[generate_title] Error: {e}")
+        logger.error(f"generate_title error: {e}")
         return default_title
+

@@ -16,8 +16,10 @@ redis_client = Redis(
 )
 
 async def test_redis_connection():
+    import logging
+    logger = logging.getLogger(__name__)
     try:
         await redis_client.ping()
-        print(f"✅ Redis connected at {redis_host}:{redis_port} (db {redis_db})")
+        logger.info(f"Redis connected at {redis_host}:{redis_port} (db {redis_db})")
     except Exception as e:
-        print(f"❌ Redis connection failed: {e}")
+        logger.error(f"Redis connection failed: {e}")

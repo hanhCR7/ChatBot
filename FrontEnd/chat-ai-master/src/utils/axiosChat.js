@@ -5,7 +5,6 @@ const instance = axios.create({
   baseURL: import.meta.env.VITE_API_CHAT_URL,
   withCredentials: true,
 });
-console.log("Axios Base URL:", import.meta.env.VITE_API_CHAT_URL);
 
 // Gắn token từ localStorage vào header Authorization
 instance.interceptors.request.use(

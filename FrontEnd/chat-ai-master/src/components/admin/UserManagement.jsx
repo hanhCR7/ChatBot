@@ -12,6 +12,7 @@ import {
   Mail,
 } from "lucide-react";
 import useAdminUserApi from "@/hooks/admin/useAdminUserAPI";
+import { useTranslation } from "@/hooks/useTranslation";
 import dayjs from "dayjs";
 import SendEmailModal from "../SendEmailModal";
 
@@ -23,6 +24,7 @@ import SendEmailModal from "../SendEmailModal";
  * - Đếm nhanh số user đang hoạt động.
  * ------------------------------------------------------------------------- */
 export default function UserManagement() {
+  const { t } = useTranslation();
   const {
     getAllUser,
     createUser,
@@ -51,7 +53,7 @@ export default function UserManagement() {
       setUsers(list);
       setError(null);
     } catch {
-      setError("Không thể tải danh sách người dùng");
+      setError(t("admin.cannotLoadUsers"));
     } finally {
       setLoading(false);
     }
@@ -108,7 +110,7 @@ export default function UserManagement() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Xác nhận xoá user?")) return;
+    if (!confirm(t("common.confirm") + " " + t("common.delete") + "?")) return;
     await deleteUser(id);
     setUsers((prev) => prev.filter((u) => u.id !== id));
     fetchActiveCount();
@@ -132,14 +134,14 @@ export default function UserManagement() {
   return (
     <div className="p-4 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">User Management</h1>
+        <h1 className="text-2xl font-bold">{t("admin.userManagement")}</h1>
         <p className="hidden md:block text-sm text-gray-500 dark:text-gray-400">
-          Số Lượng User: {activeCount}
+          {t("admin.numberOfUsers")}: {activeCount}
         </p>
         <div className="flex gap-2">
           <input
             type="text"
-            placeholder="Search..."
+            placeholder={t("admin.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="px-3 py-1.5 rounded border text-sm bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700 focus:outline-none"
@@ -148,7 +150,7 @@ export default function UserManagement() {
             onClick={exportUserData}
             className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded"
           >
-            <Download size={16} /> Export
+            <Download size={16} /> {t("admin.export")}
           </button>
           <button
             onClick={() =>
@@ -166,7 +168,7 @@ export default function UserManagement() {
             }
             className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded"
           >
-            <Plus size={16} /> Add User
+            <Plus size={16} /> {t("admin.addUser")}
           </button>
           <button
             onClick={() => {
@@ -192,10 +194,10 @@ export default function UserManagement() {
           <table className="min-w-full text-sm">
             <thead className="bg-gray-100 dark:bg-gray-700 text-left">
               <tr>
-                <th className="p-2">Name</th>
-                <th>Email</th>
-                <th>Status</th>
-                <th className="text-right pr-4">Actions</th>
+                <th className="p-2">{t("admin.name")}</th>
+                <th>{t("admin.email")}</th>
+                <th>{t("admin.status")}</th>
+                <th className="text-right pr-4">{t("admin.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -216,7 +218,7 @@ export default function UserManagement() {
                           : "bg-red-200 text-red-800"
                       }`}
                     >
-                      {u.status}
+                      {u.status === "Active" ? t("profile.active") : t("profile.inactive")}
                     </span>
                   </td>
                   <td className="pr-4 space-x-2 text-right">
@@ -228,7 +230,7 @@ export default function UserManagement() {
                         })
                       }
                       className="text-green-600 hover:underline"
-                      title="Gửi email"
+                      title={t("email.sendEmail")}
                     >
                       <Mail size={16} />
                     </button>
@@ -241,21 +243,21 @@ export default function UserManagement() {
                         })
                       }
                       className="text-blue-600 hover:underline"
-                      title="Chỉnh sửa"
+                      title={t("common.edit")}
                     >
                       <Pencil size={16} />
                     </button>
                     <button
                       onClick={() => handleDelete(u.id)}
                       className="text-red-600 hover:underline"
-                      title="Xóa"
+                      title={t("common.delete")}
                     >
                       <Trash2 size={16} />
                     </button>
                     <button
                       onClick={() => handleToggleActive(u.id)}
                       className="text-amber-600 hover:underline"
-                      title={u.status === "Active" ? "Vô hiệu hóa" : "Kích hoạt"}
+                      title={u.status === "Active" ? t("profile.inactive") : t("profile.active")}
                     >
                       {u.status === "Active" ? (
                         <EyeOff size={16} />
@@ -269,7 +271,7 @@ export default function UserManagement() {
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={4} className="p-4 text-center text-gray-500">
-                    No users
+                    {t("common.loading")}
                   </td>
                 </tr>
               )}
@@ -289,14 +291,14 @@ export default function UserManagement() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-lg font-semibold mb-4">
-              {form.mode === "create" ? "Create User" : "Edit User"}
+              {form.mode === "create" ? t("admin.addUser") : t("admin.editUser")}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-3 text-sm">
               {[
-                { label: "First name", key: "first_name" },
-                { label: "Last name", key: "last_name" },
-                { label: "Username", key: "username" },
-                { label: "Email", key: "email", type: "email" },
+                { label: t("auth.firstName"), key: "first_name" },
+                { label: t("auth.lastName"), key: "last_name" },
+                { label: t("auth.username"), key: "username" },
+                { label: t("auth.email"), key: "email", type: "email" },
               ].map(({ label, key, type }) => (
                 <div key={key}>
                   <label className="block mb-1 text-gray-600 dark:text-gray-300">
@@ -321,7 +323,7 @@ export default function UserManagement() {
               {form.mode === "create" && (
                 <div>
                   <label className="block mb-1 text-gray-600 dark:text-gray-300">
-                    Password
+                    {t("auth.password")}
                   </label>
                   <input
                     type="password"
@@ -344,13 +346,13 @@ export default function UserManagement() {
                   onClick={resetForm}
                   className="px-4 py-2 rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-1"
                 >
-                  <Plus size={14} /> Save
+                  <Plus size={14} /> {t("common.save")}
                 </button>
               </div>
             </form>

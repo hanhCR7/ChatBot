@@ -70,20 +70,16 @@ export function useChatSocket(
 
     socket.onmessage = (event) => {
       const raw = event.data;
-      console.log("📨 [useChatSocket] Nhận được raw message từ WebSocket:", raw);
 
       try {
         const data = JSON.parse(raw);
-        console.log("📦 [useChatSocket] Parsed data:", data);
 
         // Violation
         if (data.type === "violation") {
-          console.log("🔔 [useChatSocket] Nhận được violation từ WebSocket:", data);
           onMessage?.(data);
           if (data.ban_time > 0) {
             setBanned(true);
             setBanUntil(Date.now() + data.ban_time * 1000);
-            console.log("⏰ [useChatSocket] User bị ban trong", data.ban_time, "giây");
           }
           setIsTyping(false);
           return;

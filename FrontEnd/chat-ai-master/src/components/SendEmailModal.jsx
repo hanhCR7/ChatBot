@@ -1,18 +1,31 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Mail, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useEmailAPI } from "@/hooks/useEmailAPI";
 import { Button } from "@/components/ui/button";
 import { createPortal } from "react-dom";
+import { useTranslation } from "@/hooks/useTranslation";
 
 export default function SendEmailModal({ open, onClose, recipientEmail = "", recipientName = "" }) {
   const { sendCustomEmail } = useEmailAPI();
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     recipient: recipientEmail,
     subject: "",
     body: "",
   });
   const [loading, setLoading] = useState(false);
+
+  // Reset và cập nhật form khi modal mở hoặc recipientEmail thay đổi
+  useEffect(() => {
+    if (open) {
+      setFormData({
+        recipient: recipientEmail || "",
+        subject: "",
+        body: "",
+      });
+    }
+  }, [open, recipientEmail]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -24,23 +37,23 @@ export default function SendEmailModal({ open, onClose, recipientEmail = "", rec
 
     // Validation
     if (!formData.recipient) {
-      toast.error("Vui lòng nhập email người nhận");
+      toast.error(t("messages.error.requiredField"));
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.recipient)) {
-      toast.error("Email không hợp lệ");
+      toast.error(t("messages.error.invalidEmail"));
       return;
     }
 
     if (!formData.subject.trim()) {
-      toast.error("Vui lòng nhập tiêu đề email");
+      toast.error(t("messages.error.requiredField"));
       return;
     }
 
     if (!formData.body.trim()) {
-      toast.error("Vui lòng nhập nội dung email");
+      toast.error(t("messages.error.requiredField"));
       return;
     }
 
@@ -51,7 +64,7 @@ export default function SendEmailModal({ open, onClose, recipientEmail = "", rec
         subject: formData.subject,
         body: formData.body,
       });
-      toast.success("Email đã được gửi thành công!");
+      toast.success(t("messages.success.emailSent"));
       // Reset form
       setFormData({
         recipient: recipientEmail,
@@ -61,7 +74,7 @@ export default function SendEmailModal({ open, onClose, recipientEmail = "", rec
       onClose();
     } catch (error) {
       const errorMessage =
-        error.detail || error.message || "Không thể gửi email. Vui lòng thử lại sau.";
+        error.detail || error.message || t("messages.error.updateFailed");
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -88,11 +101,11 @@ export default function SendEmailModal({ open, onClose, recipientEmail = "", rec
           </div>
           <div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Gửi Email
+              {t("email.sendEmail")}
             </h2>
             {recipientName && (
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Gửi đến: {recipientName}
+                {t("email.sendTo")}: {recipientName}
               </p>
             )}
           </div>
@@ -103,7 +116,7 @@ export default function SendEmailModal({ open, onClose, recipientEmail = "", rec
           {/* Recipient Email */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Email người nhận <span className="text-red-500">*</span>
+              {t("email.recipientEmail")} <span className="text-red-500">*</span>
             </label>
             <input
               type="email"
@@ -120,14 +133,14 @@ export default function SendEmailModal({ open, onClose, recipientEmail = "", rec
           {/* Subject */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Tiêu đề <span className="text-red-500">*</span>
+              {t("email.subject")} <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               name="subject"
               value={formData.subject}
               onChange={handleChange}
-              placeholder="Nhập tiêu đề email"
+              placeholder={t("email.enterSubject")}
               required
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -136,19 +149,19 @@ export default function SendEmailModal({ open, onClose, recipientEmail = "", rec
           {/* Body */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Nội dung <span className="text-red-500">*</span>
+              {t("email.content")} <span className="text-red-500">*</span>
             </label>
             <textarea
               name="body"
               value={formData.body}
               onChange={handleChange}
-              placeholder="Nhập nội dung email (HTML được hỗ trợ)"
+              placeholder={t("email.enterContent")}
               required
               rows={8}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono text-sm"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Bạn có thể sử dụng HTML để định dạng email
+              {t("email.htmlSupported")}
             </p>
           </div>
 
@@ -161,7 +174,7 @@ export default function SendEmailModal({ open, onClose, recipientEmail = "", rec
               className="flex-1"
               disabled={loading}
             >
-              Hủy
+              {t("common.cancel")}
             </Button>
             <Button
               type="submit"
@@ -171,12 +184,12 @@ export default function SendEmailModal({ open, onClose, recipientEmail = "", rec
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Đang gửi...
+                  {t("common.loading")}
                 </>
               ) : (
                 <>
                   <Send className="w-4 h-4 mr-2" />
-                  Gửi Email
+                  {t("email.sendEmail")}
                 </>
               )}
             </Button>

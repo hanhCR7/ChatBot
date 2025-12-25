@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from db_config import db_dependency
+from db_config import db_dependency, SessionLocal
 from models import ViolationLog
 from schemas import ViolationLogCreate, ViolationLogOut
 from connect_service import get_current_user
+from service.violation_handler import log_violation_to_db
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chatbot_service", tags=["violation_log"])
 @router.get("/violation_log", status_code=status.HTTP_200_OK)
 async def get_violation_log(db: db_dependency, page: int=1, limit: int=10, current_user: dict = Depends(get_current_user)):
@@ -31,3 +34,33 @@ async def delete_violation_log(violation_log_id: int, db: db_dependency, current
     return {
         "detail": "Vi phạm đã được xóa thành công"
     }
+
+@router.post("/violation_log/test", status_code=status.HTTP_201_CREATED)
+async def test_create_violation_log(current_user: dict = Depends(get_current_user)):
+    """Endpoint test để kiểm tra việc lưu vi phạm vào DB"""
+    if current_user["role"] != "Admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập vào tài nguyên này!!!")
+    
+    test_db = SessionLocal()
+    try:
+        # Test lưu vi phạm
+        test_user_id = current_user["user_id"]
+        test_message = "Test violation message"
+        test_level = 1
+        
+        violation = await log_violation_to_db(test_user_id, test_message, test_level, test_db)
+        
+        logger.info(f"Test: Đã tạo violation log với ID: {violation.id}")
+        
+        return {
+            "detail": "Test violation log đã được tạo thành công",
+            "violation_id": violation.id,
+            "user_id": violation.user_id,
+            "level": violation.level,
+            "message": violation.message
+        }
+    except Exception as e:
+        logger.error(f"Test: Lỗi khi tạo violation log: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Lỗi khi tạo test violation log: {str(e)}")
+    finally:
+        test_db.close()

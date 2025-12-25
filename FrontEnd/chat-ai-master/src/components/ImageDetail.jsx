@@ -7,6 +7,8 @@ import {
   Image as ImageIcon,
   Loader2,
   Sparkles,
+  X,
+  MoreVertical,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import TextareaAutosize from "react-textarea-autosize";
@@ -22,6 +24,8 @@ export default function ImageDetail() {
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [showMenu, setShowMenu] = useState(false);
 
   const listRef = useRef(null);
   const bottomRef = useRef(null);
@@ -40,6 +44,17 @@ export default function ImageDetail() {
   useEffect(() => {
     fetchImages();
   }, []);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showMenu && !event.target.closest('.menu-container')) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMenu]);
 
   // Handle scroll
   const handleScroll = () => {
@@ -67,7 +82,10 @@ export default function ImageDetail() {
       setPrompt("");
       toast.success("Tạo ảnh thành công!");
     } catch (error) {
-      toast.error(error.message || "Tạo ảnh thất bại");
+      // Hiển thị error message từ server hoặc message mặc định
+      const errorMessage = error.message || error.response?.data?.detail || "Tạo ảnh thất bại";
+      toast.error(errorMessage);
+      console.error("Error generating image:", error);
     } finally {
       setLoading(false);
     }
@@ -89,12 +107,20 @@ export default function ImageDetail() {
       return;
     }
     try {
-      const updated = await updateImage(id, editText);
+      const updated = await updateImage(id, editText.trim());
       setImages(images.map((img) => (img.id === id ? updated : img)));
       setEditingId(null);
+      setEditText(""); // Clear edit text
+      // Update selected image if it's the one being edited
+      if (selectedImage && selectedImage.id === id) {
+        setSelectedImage(updated);
+        handleCloseImage(); // Close modal after successful edit
+      }
       toast.success("Cập nhật thành công");
-    } catch {
-      toast.error("Cập nhật thất bại");
+    } catch (error) {
+      console.error("Error updating image:", error);
+      const errorMessage = error.response?.data?.detail || error.message || "Cập nhật thất bại";
+      toast.error(errorMessage);
     }
   };
 
@@ -107,8 +133,58 @@ export default function ImageDetail() {
       link.download = "image.png";
       link.click();
       URL.revokeObjectURL(link.href);
+      setShowMenu(false);
     } catch {
       toast.error("Không thể tải ảnh");
+    }
+  };
+
+  const handleOpenImage = (img) => {
+    setSelectedImage(img);
+    setShowMenu(false);
+  };
+
+  const handleCloseImage = (preserveEdit = false) => {
+    setSelectedImage(null);
+    setShowMenu(false);
+    if (!preserveEdit) {
+      setEditingId(null);
+    }
+  };
+
+  const handleEditFromModal = () => {
+    if (selectedImage) {
+      const imageId = selectedImage.id;
+      const description = selectedImage.description || "";
+      
+      // Set editing state first
+      setEditingId(imageId);
+      setEditText(description);
+      setShowMenu(false);
+      
+      // Close modal but preserve editingId
+      setSelectedImage(null);
+      
+      // Scroll to the card after a short delay to ensure it's rendered
+      setTimeout(() => {
+        const cardElement = document.querySelector(`[data-image-id="${imageId}"]`);
+        if (cardElement) {
+          cardElement.scrollIntoView({ behavior: "smooth", block: "center" });
+          // Highlight the card briefly
+          cardElement.style.transition = "box-shadow 0.3s";
+          cardElement.style.boxShadow = "0 0 0 3px rgba(59, 130, 246, 0.5)";
+          setTimeout(() => {
+            cardElement.style.boxShadow = "";
+          }, 1000);
+        }
+      }, 150);
+    }
+  };
+
+  const handleDeleteFromModal = async () => {
+    if (selectedImage) {
+      await handleDelete(selectedImage.id);
+      handleCloseImage();
     }
   };
 
@@ -145,13 +221,17 @@ export default function ImageDetail() {
               {images.map((img, index) => (
                 <motion.div
                   key={img.id}
+                  data-image-id={img.id}
                   initial={{ opacity: 0, scale: 0.9, y: 20 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ delay: index * 0.05, duration: 0.3 }}
                   className="relative group rounded-2xl shadow-lg overflow-hidden bg-white dark:bg-gray-800/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 transition-all duration-300 hover:shadow-2xl hover:scale-[1.02]"
                 >
-                  <div className="aspect-square w-full overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 relative">
+                  <div 
+                    className="aspect-square w-full overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 relative cursor-pointer"
+                    onClick={() => handleOpenImage(img)}
+                  >
                     <img
                       src={img.url}
                       alt={img.description}
@@ -161,49 +241,6 @@ export default function ImageDetail() {
                     {/* Gradient overlay on hover */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                   </div>
-
-                  {/* Overlay actions */}
-                  <AnimatePresence>
-                    {editingId !== img.id && (
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-3 transition-opacity duration-300 backdrop-blur-sm"
-                      >
-                        <motion.button
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => {
-                            setEditingId(img.id);
-                            setEditText(img.description || "");
-                          }}
-                          className="p-3 rounded-full bg-yellow-500 text-white shadow-lg hover:bg-yellow-600 transition-colors"
-                          title="Chỉnh sửa"
-                        >
-                          <Edit2 size={18} />
-                        </motion.button>
-                        <motion.button
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => handleDelete(img.id)}
-                          className="p-3 rounded-full bg-red-600 text-white shadow-lg hover:bg-red-700 transition-colors"
-                          title="Xóa"
-                        >
-                          <Trash2 size={18} />
-                        </motion.button>
-                        <motion.button
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => handleDownload(img.url)}
-                          className="p-3 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors"
-                          title="Tải xuống"
-                        >
-                          <Download size={18} />
-                        </motion.button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
 
                   <div className="p-4">
                     {editingId === img.id ? (
@@ -317,6 +354,114 @@ export default function ImageDetail() {
           )}
         </div>
       </div>
+
+      {/* Image Modal */}
+      <AnimatePresence>
+        {selectedImage && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleCloseImage}
+              className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm"
+            />
+            
+            {/* Modal Content */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              onClick={handleCloseImage}
+            >
+              <div
+                className="relative max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Image */}
+                <div className="relative w-full h-full flex items-center justify-center">
+                  <img
+                    src={selectedImage.url}
+                    alt={selectedImage.description}
+                    className="max-w-full max-h-full object-contain rounded-lg"
+                  />
+                  
+                  {/* Description at bottom */}
+                  {selectedImage.description && (
+                    <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 backdrop-blur-md px-4 py-2 rounded-lg text-white text-sm max-w-2xl text-center">
+                      {selectedImage.description}
+                    </div>
+                  )}
+
+                  {/* Close Button */}
+                  <button
+                    onClick={handleCloseImage}
+                    className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-md hover:bg-white/20 text-white transition-colors z-10"
+                  >
+                    <X size={24} />
+                  </button>
+
+                  {/* Menu Button */}
+                  <div className="absolute top-4 right-16 menu-container">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowMenu(!showMenu);
+                      }}
+                      className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-md hover:bg-white/20 text-white transition-colors"
+                    >
+                      <MoreVertical size={24} />
+                    </button>
+
+                    {/* Action Buttons Menu */}
+                    <AnimatePresence>
+                      {showMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8, y: -10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.8, y: -10 }}
+                          className="absolute top-12 right-0 flex gap-3 bg-black/80 backdrop-blur-md rounded-2xl p-2 menu-container"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={handleEditFromModal}
+                            className="p-3 rounded-full bg-yellow-500 text-white shadow-lg hover:bg-yellow-600 transition-colors"
+                            title="Chỉnh sửa"
+                          >
+                            <Edit2 size={20} />
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={handleDeleteFromModal}
+                            className="p-3 rounded-full bg-red-600 text-white shadow-lg hover:bg-red-700 transition-colors"
+                            title="Xóa"
+                          >
+                            <Trash2 size={20} />
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => handleDownload(selectedImage.url)}
+                            className="p-3 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors"
+                            title="Tải xuống"
+                          >
+                            <Download size={20} />
+                          </motion.button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

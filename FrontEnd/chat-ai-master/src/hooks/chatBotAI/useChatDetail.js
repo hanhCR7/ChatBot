@@ -67,7 +67,6 @@ export const useChatDetail = (chatId) => {
           dispatch(updateMessagesInChat({ chatId, messages: mapped }));
         }
       } catch (err) {
-        console.error("Lỗi tải chat:", err);
         if (isMounted) setMessages([]);
       }
     };
@@ -107,7 +106,6 @@ export const useChatDetail = (chatId) => {
         (role === "system" && (content || message)?.includes("Cảnh báo")) ||
         (role === "system" && (content || message)?.includes("bị cấm chat"))
       ) {
-        console.log("🚨 [useChatDetail] Nhận được violation/ban từ server:", parsed);
         const msgText = message || content;
         
         // Xử lý message ban (khi user đang bị ban)
@@ -124,10 +122,8 @@ export const useChatDetail = (chatId) => {
               : Date.now(),
           };
           
-          console.log("✅ [useChatDetail] Tạo violation object từ ban message:", violationObj);
           setViolations((prev) => {
             const updated = [...prev, violationObj];
-            console.log("📋 [useChatDetail] Violations state updated:", updated);
             return updated;
           });
           return;
@@ -138,8 +134,6 @@ export const useChatDetail = (chatId) => {
         // Nếu không có (fallback cho legacy messages), parse từ text
         let violationLevel = parsed.level;
         let violationBanTime = parsed.ban_time;
-        
-        console.log("📊 [useChatDetail] Violation level từ server:", violationLevel, "ban_time:", violationBanTime);
         
         if (violationLevel === undefined || violationBanTime === undefined) {
           // Fallback: parse từ message text (cho backward compatibility)
@@ -157,7 +151,6 @@ export const useChatDetail = (chatId) => {
             : msgText.includes("1 ngày")
             ? 86400
             : 0;
-          console.log("⚠️ [useChatDetail] Parse từ text - level:", violationLevel, "ban_time:", violationBanTime);
         }
         
         const violationObj = {
@@ -172,10 +165,8 @@ export const useChatDetail = (chatId) => {
             : Date.now(),
         };
         
-        console.log("✅ [useChatDetail] Tạo violation object:", violationObj);
         setViolations((prev) => {
           const updated = [...prev, violationObj];
-          console.log("📋 [useChatDetail] Violations state updated:", updated);
           return updated;
         });
         return;

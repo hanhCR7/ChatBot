@@ -10,6 +10,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/identity_service/login")
 load_dotenv()
 USER_SERVICE_URL = os.getenv('USER_SERVICE_URL')
 EMAIL_SERVICE_URL = os.getenv('EMAIL_SERVICE_URL')
+CHAT_SERVICE_URL = os.getenv('CHAT_SERVICE_URL', 'http://localhost:8003/api/chatbot_service/')
 SERVICE_KEY = os.getenv('SERVICE_KEY')
 def hash_password( password: str) -> str:
     return bcrypt_context.hash(password)
@@ -270,3 +271,27 @@ async def send_contact_admin_email(user_email: str, username: str, subject: str,
             raise HTTPException(status_code=500, detail=f"Lỗi khi gửi email liên hệ admin: {repr(e)}")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Lỗi không xác định khi gửi email: {repr(e)}")
+
+async def get_user_strike_count(user_id: int):
+    """Lấy số lần vi phạm của user từ chat_service"""
+    # Kiểm tra xem CHAT_SERVICE_URL có được cấu hình không
+    if not CHAT_SERVICE_URL or CHAT_SERVICE_URL == 'http://localhost:8003/api/chatbot_service/':
+        # Nếu không có URL hoặc là default, có thể service chưa chạy, trả về 0
+        return 0
+    
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        try:
+            response = await client.get(f'{CHAT_SERVICE_URL}check-violations/{user_id}')
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("strike_count", 0)
+            # Nếu không lấy được (404, 500, etc.), trả về 0 (cho phép login)
+            return 0
+        except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as e:
+            # Lỗi kết nối - service có thể chưa chạy, không chặn login
+            print(f"⚠️ Không thể kết nối đến chat_service để kiểm tra vi phạm cho user {user_id}: {e}")
+            return 0
+        except Exception as e:
+            # Lỗi khác, log và trả về 0 để không chặn login
+            print(f"⚠️ Lỗi khi kiểm tra vi phạm từ chat_service cho user {user_id}: {e}")
+            return 0

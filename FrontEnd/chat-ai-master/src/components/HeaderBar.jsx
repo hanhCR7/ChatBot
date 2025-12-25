@@ -32,15 +32,17 @@ export default function HeaderBar({ onToggleSidebar }) {
   const { logout } = useAuthApi();
   const navigate = useNavigate();
 
+  const fetchUser = async () => {
+    try {
+      const data = await getMe();
+      setUser(data);
+    } catch (err) {
+      console.error("Failed to fetch current user:", err);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        const data = await getMe();
-        setUser(data);
-      } catch (err) {
-        console.error("Failed to fetch current user:", err);
-      }
-    })();
+    fetchUser();
   }, []);
   
   // khi darkmode thay đổi, cập nhật class và save
@@ -209,6 +211,10 @@ export default function HeaderBar({ onToggleSidebar }) {
           open={openProfile}
           onClose={() => setOpenProfile(false)}
           user={user}
+          onUserUpdate={(updatedUser) => {
+            setUser(updatedUser);
+            fetchUser(); // Refresh to get latest data
+          }}
         />
         <SettingsModal
           open={openSettings}

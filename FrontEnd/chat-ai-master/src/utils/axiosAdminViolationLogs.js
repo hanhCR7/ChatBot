@@ -2,7 +2,7 @@ import axios from "axios";
 import { setupRefreshTokenInterceptor } from "./refreshToken";
 
 const axiosAdminViolationLogs = axios.create({
-  baseURL: import.meta.env.VITE_API_CHATBOT_URL || import.meta.env.VITE_API_URL || "http://localhost:8000",
+  baseURL: import.meta.env.VITE_API_ADMIN_VIOLATION_LOGS,
   withCredentials: true,
 });
 

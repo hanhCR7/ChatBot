@@ -43,27 +43,6 @@ const chatSlice = createSlice({
       chat.messages.push(newMsg);
     },
 
-    addUploadFile: (state, action) => {
-      const { chat_id, file_id, filename, url, size, mime_type } =
-        action.payload;
-
-      const chat = state.data.find((c) => c.id === chat_id);
-      if (!chat) return;
-
-      if (!chat.messages) chat.messages = [];
-
-      const newFileMsg = {
-        id: file_id || crypto.randomUUID(),
-        role: "assistant",
-        type: "file",
-        content: `${filename || "Uploaded file"}`,
-        file: { id: file_id, name: filename, url, size, mime_type },
-        timestamp: new Date().toISOString(),
-      };
-
-      chat.messages.push(newFileMsg);
-    },
-
     setNameChat: (state, action) => {
       const { chatId, newTitle } = action.payload;
       const chat = state.data.find((c) => c.id === chatId);

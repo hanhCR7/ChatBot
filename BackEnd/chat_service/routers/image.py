@@ -16,6 +16,8 @@ from crud import (
 from schemas import ImageCreate, ImageOut, UpdateImageDescription 
 from db_config import db_dependency
 from models import Image
+from service.violation_handler import contains_violation, process_violation_for_image
+from service.cache import load_keywords_from_cache
 
 # ==========================
 # Setup
@@ -57,7 +59,30 @@ async def generate_and_save_image(
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt không được để trống")
 
-    # --- 1. Kiểm duyệt trước (Moderation) ---
+    # --- 1. Kiểm tra từ khóa bị cấm (Banned Keywords) ---
+    try:
+        has_violation = await contains_violation(prompt)
+        if has_violation:
+            logger.warning(f"User {current_user['user_id']} vi phạm từ khóa bị cấm trong prompt tạo ảnh: {prompt}")
+            
+            # Xử lý vi phạm: log, tăng strike, ban nếu cần
+            violation_info = await process_violation_for_image(prompt, db, current_user)
+            
+            # Tạo thông báo chi tiết với thông tin vi phạm
+            violation_message = violation_info["message"]
+            if violation_info["strikes"] >= 4:
+                violation_message += " Tài khoản của bạn đã bị khóa. Vui lòng liên hệ admin để được hỗ trợ."
+            
+            raise HTTPException(
+                status_code=400,
+                detail=violation_message
+            )
+    except HTTPException:
+        raise  # Re-raise HTTPException để trả về lỗi cho client
+    except Exception as e:
+        logger.warning("Kiểm tra từ khóa bị cấm lỗi (bỏ qua): %s", e)
+
+    # --- 2. Kiểm duyệt trước (Moderation) ---
     try:
         mod = client.moderations.create(model="omni-moderation-latest", input=prompt)
         if mod.results[0].flagged:
@@ -65,11 +90,13 @@ async def generate_and_save_image(
                 status_code=400,
                 detail="Prompt bị chặn bởi hệ thống kiểm duyệt. Vui lòng nhập mô tả khác."
             )
+    except HTTPException:
+        raise  # Re-raise HTTPException để trả về lỗi cho client
     except Exception as e:
         logger.warning("Moderation check lỗi (bỏ qua): %s", e)
 
     try:
-        # --- 2. Gọi OpenAI để tạo ảnh ---
+        # --- 3. Gọi OpenAI để tạo ảnh ---
         response = client.images.generate(
             model="gpt-image-1",
             prompt=prompt,
@@ -77,7 +104,7 @@ async def generate_and_save_image(
             n=1
         )
 
-        # --- 3. Xử lý phản hồi ---
+        # --- 4. Xử lý phản hồi ---
         data = response.data[0]
         image_url = getattr(data, "url", None)
         image_b64 = getattr(data, "b64_json", None)
@@ -88,7 +115,7 @@ async def generate_and_save_image(
                 detail="OpenAI không trả về dữ liệu ảnh hợp lệ (không có URL hoặc base64)."
             )
 
-        # --- 4. Tải hoặc decode ảnh ---
+        # --- 5. Tải hoặc decode ảnh ---
         if image_url:
             async with httpx.AsyncClient(timeout=30) as http_client:
                 res = await http_client.get(image_url)
@@ -97,17 +124,17 @@ async def generate_and_save_image(
         else:
             image_bytes = base64.b64decode(image_b64)
 
-        # --- 5. Lưu file ---
+        # --- 6. Lưu file ---
         filename = f"{uuid.uuid4().hex}.png"
         filepath = os.path.join(UPLOAD_DIR, filename)
         with open(filepath, "wb") as f:
             f.write(image_bytes)
 
-        # --- 6. Tạo URL public ---
+        # --- 7. Tạo URL public ---
         base_url = str(request.base_url).rstrip("/")
         full_url = f"{base_url}/static/images/{filename}"
 
-        # --- 7. Lưu vào DB ---
+        # --- 8. Lưu vào DB ---
         img_data = ImageCreate(
             user_id=current_user["user_id"],
             url=full_url,
@@ -173,7 +200,7 @@ def delete_user_image(
         if os.path.exists(filepath):
             os.remove(filepath)
     except Exception as e:
-        print("Không thể xóa file ảnh:", e)
+        logger.error(f"Không thể xóa file ảnh: {e}")
 
     return delete_image(db, image_id, current_user["user_id"])
 
@@ -198,7 +225,7 @@ def admin_delete_image(image_id: int, db: db_dependency, current_user=Depends(re
         if os.path.exists(filepath):
             os.remove(filepath)
     except Exception as e:
-        print("Không thể xóa file ảnh:", e)
+        logger.error(f"Không thể xóa file ảnh: {e}")
 
     return delete_image(db, image_id, None)
 

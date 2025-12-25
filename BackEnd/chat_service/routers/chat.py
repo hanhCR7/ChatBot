@@ -20,6 +20,7 @@ from connect_service import get_current_user, validate_token_from_query, get_use
 from sockets.connection_manager import ConnectionManager
 from sockets.ws_helpers import handle_send_message, handle_typing, now_vn
 from service.prompts import SYSTEM_MESSAGE
+from service.violation_handler import get_user_strike_count, is_user_banned_from_chat
 router = APIRouter(prefix="/api/chatbot_service",tags=["chatbot"])
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -167,6 +168,30 @@ async def get_chats_by_user_id(db: db_dependency, user=Depends(get_current_user)
     except Exception as e:
         raise HTTPException(status_code=500, detail="Lỗi server khi lấy danh sách chat")
 
+@router.get("/check-violations/{user_id}")
+async def check_user_violations(user_id: int, db: db_dependency):
+    """Endpoint để kiểm tra vi phạm của user (dùng cho identity_service)"""
+    try:
+        strike_count = await get_user_strike_count(user_id, db)
+        is_banned = await is_user_banned_from_chat(user_id)
+        return {
+            "user_id": user_id,
+            "strike_count": strike_count,
+            "is_banned": is_banned,
+            "can_login": strike_count < 4,
+            "can_chat": strike_count < 2 and not is_banned
+        }
+    except Exception as e:
+        logger.error(f"Lỗi khi kiểm tra vi phạm cho user {user_id}: {e}")
+        # Trả về giá trị mặc định an toàn
+        return {
+            "user_id": user_id,
+            "strike_count": 0,
+            "is_banned": False,
+            "can_login": True,
+            "can_chat": True
+        }
+
 @router.get("/chat/{chat_id}", response_model=ChatHistoryOut)
 async def get_chat(chat_id: uuid.UUID, db: db_dependency, user=Depends(get_current_user)):
     try:
@@ -183,11 +208,39 @@ async def get_chat(chat_id: uuid.UUID, db: db_dependency, user=Depends(get_curre
 @router.post("/chat", response_model=ChatSessionOut)
 async def create_chat(chat_session: ChatSessionCreate, db: db_dependency, user=Depends(get_current_user)):
     try:
+        user_id = user["user_id"]
+        
+        # Kiểm tra vi phạm: nếu có vi phạm (strike >= 2) thì không cho tạo chat mới
+        strike_count = await get_user_strike_count(user_id, db)
+        is_banned = await is_user_banned_from_chat(user_id)
+        
+        if strike_count >= 4:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Tài khoản của bạn đã bị khóa do vi phạm nhiều lần. Vui lòng liên hệ admin để được hỗ trợ."
+            )
+        
+        if is_banned or strike_count >= 2:
+            violation_message = "Bạn đang bị cấm chat do vi phạm nội dung. "
+            if strike_count == 2:
+                violation_message += "Bạn bị cấm chat 5 phút (vi phạm lần 2)."
+            elif strike_count == 3:
+                violation_message += "Bạn bị cấm chat 1 giờ (vi phạm lần 3)."
+            else:
+                violation_message += "Vui lòng liên hệ admin để được hỗ trợ."
+            
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=violation_message
+            )
+        
         chat_data = ChatSessionCreate(
-            user_id=user["user_id"],
+            user_id=user_id,
             title=chat_session.title or "New Chat"
         )
         return create_chat_session(db, chat_data)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail="Lỗi server khi tạo chat")
 @router.put("/chat/{chat_id}", response_model=ChatSessionOut)

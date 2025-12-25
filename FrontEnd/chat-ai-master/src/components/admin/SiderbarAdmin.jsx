@@ -20,42 +20,45 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-
-const menu = [
-  { name: "Dashboard", path: "/admin/dashboard", icon: Home },
-  { name: "Users", path: "/admin/users", icon: Users },
-  { name: "Roles", path: "/admin/roles", icon: Shield },
-  { name: "Permissions", path: "/admin/permissions", icon: Key },
-  { name: "User Roles", path: "/admin/user-roles", icon: UserCheck },
-  {
-    name: "Role Permissions",
-    path: "/admin/role-permissions",
-    icon: Link,
-  },
-  {
-    name: "Banned Keywords",
-    path: "/admin/banned-keywords",
-    icon: WholeWord,
-  },
-  {
-    name: "Violation Logs",
-    path: "/admin/violation-logs",
-    icon: ShieldAlert,
-  },
-  {
-    name: "All Logs",
-    path: "/admin/log",
-    icon: FileText,
-  },
-  { name: "All Chat", path: "/admin/all-chat-users", icon: ChartArea },
-  {
-    name: "All Tmage",
-    path: "/admin/all-image-users",
-    icon: ImageIcon,
-  },
-];
+import { useTranslation } from "@/hooks/useTranslation";
 
 const SidebarAdmin = ({ collapsed, setCollapsed }) => {
+  const { t } = useTranslation();
+  
+  const menu = [
+    { name: t("admin.dashboard"), path: "/admin/dashboard", icon: Home },
+    { name: t("admin.users"), path: "/admin/users", icon: Users },
+    { name: t("admin.roles"), path: "/admin/roles", icon: Shield },
+    { name: t("admin.permissions"), path: "/admin/permissions", icon: Key },
+    { name: t("admin.userRoles"), path: "/admin/user-roles", icon: UserCheck },
+    {
+      name: t("admin.rolePermissions"),
+      path: "/admin/role-permissions",
+      icon: Link,
+    },
+    {
+      name: t("admin.bannedKeywords"),
+      path: "/admin/banned-keywords",
+      icon: WholeWord,
+    },
+    {
+      name: t("admin.violationLogs"),
+      path: "/admin/violation-logs",
+      icon: ShieldAlert,
+    },
+    {
+      name: t("admin.allLogs"),
+      path: "/admin/log",
+      icon: FileText,
+    },
+    { name: t("admin.allChat"), path: "/admin/all-chat-users", icon: ChartArea },
+    {
+      name: t("admin.allImages"),
+      path: "/admin/all-image-users",
+      icon: ImageIcon,
+    },
+  ];
+  
   /* dark‑mode vẫn giữ local */
   const [dark, setDark] = useState(
     () => localStorage.getItem("admin_dark_mode") === "true"
@@ -79,7 +82,7 @@ const SidebarAdmin = ({ collapsed, setCollapsed }) => {
               exit={{ opacity: 0, x: -10 }}
               className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent"
             >
-              Admin Panel
+              {t("admin.adminPanel")}
             </motion.h1>
           )}
         </AnimatePresence>
@@ -103,7 +106,7 @@ const SidebarAdmin = ({ collapsed, setCollapsed }) => {
               exit={{ opacity: 0 }}
               className="text-xs mb-2 pl-2 text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider"
             >
-              Menu
+              {t("admin.menu")}
             </motion.p>
           )}
         </AnimatePresence>
@@ -170,7 +173,7 @@ const SidebarAdmin = ({ collapsed, setCollapsed }) => {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
               >
-                {dark ? "Light Mode" : "Dark Mode"}
+                {dark ? t("admin.lightMode") : t("admin.darkMode")}
               </motion.span>
             )}
           </AnimatePresence>
@@ -188,7 +191,7 @@ const SidebarAdmin = ({ collapsed, setCollapsed }) => {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
               >
-                Help
+                {t("admin.help")}
               </motion.span>
             )}
           </AnimatePresence>
@@ -210,7 +213,7 @@ const SidebarAdmin = ({ collapsed, setCollapsed }) => {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
               >
-                Logout
+                {t("admin.logout")}
               </motion.span>
             )}
           </AnimatePresence>

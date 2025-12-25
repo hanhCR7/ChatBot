@@ -65,7 +65,7 @@ export const useChatApi = () => {
   // Đổi tiêu đề đoạn chat
   const updateChatTitle = useCallback(
     async (chatId, title) => {
-      await axios.patch(`api/chatbot_service/chat/${chatId}`, { title });
+      await axios.put(`api/chatbot_service/chat/${chatId}`, { title });
       dispatch(setNameChat({ chatId, newTitle: title }));
     },
     [dispatch]
